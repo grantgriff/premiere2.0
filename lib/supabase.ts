@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient as createSupabaseBrowserClient } from '@supabase/ssr'
 
 // Server-side Supabase client
 export const supabase = createClient(
@@ -9,7 +9,10 @@ export const supabase = createClient(
 
 // Client-side Supabase client (for use in components)
 export const createBrowserClient = () => {
-  return createClientComponentClient()
+  return createSupabaseBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 }
 
 // Storage bucket names
