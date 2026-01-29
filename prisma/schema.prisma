@@ -1,0 +1,198 @@
+// VideoCraft AI - Prisma Schema
+// Database: PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ===========================================
+// User Model
+// ===========================================
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  avatarUrl String?  @map("avatar_url")
+  googleId  String   @unique @map("google_id")
+  credits   Int      @default(100)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  conversations   Conversation[]
+  characters      Character[]
+  videos          Video[]
+  styleReferences StyleReference[]
+
+  @@index([email])
+  @@index([googleId])
+  @@map("users")
+}
+
+// ===========================================
+// Conversation Model
+// ===========================================
+model Conversation {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String   @default("New Conversation")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+  videos   Video[]
+
+  @@index([userId])
+  @@map("conversations")
+}
+
+// ===========================================
+// Message Model
+// ===========================================
+model Message {
+  id             String      @id @default(uuid())
+  conversationId String      @map("conversation_id")
+  role           MessageRole
+  content        String      @db.Text
+  mediaUrls      String[]    @default([]) @map("media_urls")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  // Relationships
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("messages")
+}
+
+enum MessageRole {
+  user
+  assistant
+  system
+}
+
+// ===========================================
+// Video Model
+// ===========================================
+model Video {
+  id                 String      @id @default(uuid())
+  conversationId     String      @map("conversation_id")
+  userId             String      @map("user_id")
+  prompt             String      @db.Text
+  model              VideoModel
+  duration           Int         // seconds (1-30)
+  videoUrl           String?     @map("video_url")
+  thumbnailUrl       String?     @map("thumbnail_url")
+  status             VideoStatus @default(pending)
+  qualityScore       Float?      @map("quality_score") // 0-10
+  qualityReport      Json?       @map("quality_report")
+  styleReferenceUrls String[]    @default([]) @map("style_reference_urls")
+  characterIds       String[]    @default([]) @map("character_ids")
+  metadata           Json?       // model-specific params
+  createdAt          DateTime    @default(now()) @map("created_at")
+  completedAt        DateTime?   @map("completed_at")
+
+  // Relationships
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([conversationId])
+  @@index([status])
+  @@map("videos")
+}
+
+enum VideoModel {
+  veo3_1
+  runway
+  luma
+  sora
+  odyssey
+  world_labs
+}
+
+enum VideoStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+// ===========================================
+// Character Model
+// ===========================================
+model Character {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  name              String
+  description       String   @db.Text
+  referenceImageUrl String?  @map("reference_image_url")
+  embeddingData     Json?    @map("embedding_data") // AI-extracted features
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("characters")
+}
+
+// ===========================================
+// Style Reference Model
+// ===========================================
+model StyleReference {
+  id             String          @id @default(uuid())
+  userId         String          @map("user_id")
+  sourceUrl      String          @map("source_url")
+  sourceType     StyleSourceType @map("source_type")
+  colorPalette   Json?           @map("color_palette") // hex codes array
+  styleEmbedding Json?           @map("style_embedding")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("style_references")
+}
+
+enum StyleSourceType {
+  upload
+  youtube
+}
+
+// ===========================================
+// Generation Job Model (for queue management)
+// ===========================================
+model GenerationJob {
+  id             String    @id @default(uuid())
+  videoId        String    @unique @map("video_id")
+  status         JobStatus @default(queued)
+  attempts       Int       @default(0)
+  lastError      String?   @map("last_error") @db.Text
+  externalJobId  String?   @map("external_job_id") // Model provider's job ID
+  webhookPayload Json?     @map("webhook_payload")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+
+  @@index([status])
+  @@index([videoId])
+  @@map("generation_jobs")
+}
+
+enum JobStatus {
+  queued
+  processing
+  completed
+  failed
+  cancelled
+}

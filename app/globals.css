@@ -1,0 +1,146 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Claude-Inspired Dark Theme Variables */
+:root {
+  --background: #1A1A1A;
+  --background-secondary: #2C2C2C;
+  --foreground: #F5F5DC;
+  --foreground-secondary: #A8A8A8;
+  --accent: #8B7355;
+  --accent-hover: #A08563;
+  --border: #3A3A3A;
+  --success: #4CAF50;
+  --warning: #FF9800;
+  --error: #F44336;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-foreground-secondary;
+  }
+}
+
+@layer components {
+  /* Panel styles */
+  .panel {
+    @apply bg-background border-r border-border;
+  }
+
+  .panel-secondary {
+    @apply bg-background-secondary rounded-lg;
+  }
+
+  /* Button variants */
+  .btn-primary {
+    @apply bg-accent hover:bg-accent-hover text-background font-medium px-4 py-2 rounded-lg transition-colors;
+  }
+
+  .btn-secondary {
+    @apply bg-background-secondary hover:bg-border text-foreground font-medium px-4 py-2 rounded-lg transition-colors border border-border;
+  }
+
+  .btn-ghost {
+    @apply hover:bg-background-secondary text-foreground-secondary hover:text-foreground px-3 py-2 rounded-lg transition-colors;
+  }
+
+  /* Input styles */
+  .input-field {
+    @apply bg-background-secondary border border-border rounded-lg px-4 py-2 text-foreground placeholder:text-foreground-secondary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent;
+  }
+
+  /* Quality badge styles */
+  .quality-badge {
+    @apply px-2 py-1 rounded-full text-xs font-medium;
+  }
+
+  .quality-high {
+    @apply bg-success/20 text-success;
+  }
+
+  .quality-medium {
+    @apply bg-warning/20 text-warning;
+  }
+
+  .quality-low {
+    @apply bg-error/20 text-error;
+  }
+
+  /* Video player container */
+  .video-container {
+    @apply relative aspect-video bg-background-secondary rounded-lg overflow-hidden;
+  }
+
+  /* Chat message bubbles */
+  .message-user {
+    @apply bg-accent/20 text-foreground rounded-2xl rounded-br-sm px-4 py-2 max-w-[80%] ml-auto;
+  }
+
+  .message-assistant {
+    @apply bg-background-secondary text-foreground rounded-2xl rounded-bl-sm px-4 py-2 max-w-[80%];
+  }
+
+  /* Model selector chip */
+  .model-chip {
+    @apply px-3 py-1 rounded-full text-sm font-medium bg-background-secondary border border-border hover:border-accent cursor-pointer transition-colors;
+  }
+
+  .model-chip-active {
+    @apply bg-accent text-background border-accent;
+  }
+
+  /* Duration selector */
+  .duration-chip {
+    @apply px-3 py-1 rounded-lg text-sm font-medium bg-background-secondary border border-border hover:border-accent cursor-pointer transition-colors;
+  }
+
+  .duration-chip-active {
+    @apply bg-accent/20 text-accent border-accent;
+  }
+}
+
+@layer utilities {
+  /* Text gradient */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-accent to-foreground;
+  }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-background-secondary/80 backdrop-blur-lg;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
