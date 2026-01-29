@@ -55,6 +55,7 @@ interface AppState {
   setActiveConversation: (id: string | null) => void
   addConversation: (conversation: Conversation) => void
   updateConversation: (id: string, updates: Partial<Conversation>) => void
+  deleteConversation: (id: string) => void
 
   // Messages
   addMessage: (conversationId: string, message: Message) => void
@@ -103,6 +104,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       conversations: state.conversations.map((c) =>
         c.id === id ? { ...c, ...updates, updatedAt: new Date() } : c
       ),
+    })),
+  deleteConversation: (id) =>
+    set((state) => ({
+      conversations: state.conversations.filter((c) => c.id !== id),
+      activeConversationId:
+        state.activeConversationId === id ? null : state.activeConversationId,
     })),
 
   // Messages
