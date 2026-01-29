@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { prisma, Video } from '@/lib/db'
 import { enqueueQualityCheck } from '@/lib/queue'
 import { generateId } from '@/lib/utils'
 
@@ -16,13 +16,15 @@ export async function POST(request: NextRequest) {
 
     console.log(`Webhook received: ${provider} - ${event}`)
 
+    // In development, webhooks are simulated
+    // In production, implement proper webhook handling
     switch (provider) {
       case 'veo':
-        return handleVeoWebhook(event, data)
+        return handleWebhook(event, data, 'veo')
       case 'runway':
-        return handleRunwayWebhook(event, data)
+        return handleWebhook(event, data, 'runway')
       case 'luma':
-        return handleLumaWebhook(event, data)
+        return handleWebhook(event, data, 'luma')
       default:
         console.warn(`Unknown provider: ${provider}`)
         return NextResponse.json({ received: true })
@@ -33,34 +35,57 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handleVeoWebhook(
+async function handleWebhook(
   event: string,
-  data: { operationId: string; videoUrl?: string; thumbnailUrl?: string; error?: string }
+  data: {
+    videoId?: string
+    operationId?: string
+    generationId?: string
+    id?: string
+    videoUrl?: string
+    video_url?: string
+    thumbnailUrl?: string
+    thumbnail_url?: string
+    video?: { url: string; thumbnail_url: string }
+    output?: { video_url: string; thumbnail_url: string }
+    error?: string
+    failure_reason?: string
+  },
+  provider: string
 ) {
-  const { operationId, videoUrl, thumbnailUrl, error } = data
-
-  // Find video by external job ID in metadata
-  const video = await prisma.video.findFirst({
-    where: {
-      metadata: {
-        path: ['externalJobId'],
-        equals: operationId,
-      },
-    },
-  })
-
-  if (!video) {
-    console.warn(`Video not found for operation: ${operationId}`)
+  // Get video ID from various possible fields
+  const videoId = data.videoId || data.operationId || data.generationId || data.id
+  if (!videoId) {
+    console.warn('No video ID in webhook data')
     return NextResponse.json({ received: true })
   }
 
-  if (event === 'generation.completed' && videoUrl) {
+  // Try to find the video
+  const video = await prisma.video.findUnique({ where: { id: videoId } })
+
+  if (!video) {
+    console.warn(`Video not found: ${videoId}`)
+    return NextResponse.json({ received: true })
+  }
+
+  const videoData = video as Video
+
+  // Determine video URL from various possible fields
+  const videoUrl = data.videoUrl || data.video_url || data.video?.url || data.output?.video_url
+  const thumbnailUrl = data.thumbnailUrl || data.thumbnail_url || data.video?.thumbnail_url || data.output?.thumbnail_url
+  const errorMessage = data.error || data.failure_reason
+
+  // Handle success events
+  const successEvents = ['generation.completed', 'SUCCEEDED', 'completed', 'success']
+  const failureEvents = ['generation.failed', 'FAILED', 'failed', 'error']
+
+  if (successEvents.includes(event) && videoUrl) {
     await prisma.video.update({
-      where: { id: video.id },
+      where: { id: videoData.id },
       data: {
         status: 'completed',
         videoUrl,
-        thumbnailUrl,
+        thumbnailUrl: thumbnailUrl || null,
         completedAt: new Date(),
       },
     })
@@ -68,7 +93,7 @@ async function handleVeoWebhook(
     // Queue quality check
     await enqueueQualityCheck({
       id: generateId(),
-      videoId: video.id,
+      videoId: videoData.id,
       videoUrl,
       createdAt: new Date().toISOString(),
     })
@@ -76,139 +101,37 @@ async function handleVeoWebhook(
     // Add assistant message
     await prisma.message.create({
       data: {
-        conversationId: video.conversationId,
+        conversationId: videoData.conversationId,
         role: 'assistant',
-        content: `Video generated successfully! Quality verification in progress.`,
+        content: `Video generated successfully using ${provider}! Quality verification in progress.`,
       },
     })
-  } else if (event === 'generation.failed') {
+
+    console.log(`Video ${videoData.id} completed successfully`)
+  } else if (failureEvents.includes(event)) {
     await prisma.video.update({
-      where: { id: video.id },
+      where: { id: videoData.id },
       data: {
         status: 'failed',
-        metadata: {
-          ...(video.metadata as object),
-          error,
-        },
       },
     })
 
     // Refund credits
     await prisma.user.update({
-      where: { id: video.userId },
-      data: { credits: { increment: video.duration } },
+      where: { id: videoData.userId },
+      data: { credits: { increment: videoData.duration } },
     })
 
     // Add error message
     await prisma.message.create({
       data: {
-        conversationId: video.conversationId,
+        conversationId: videoData.conversationId,
         role: 'assistant',
-        content: `Video generation failed: ${error || 'Unknown error'}. Your credits have been refunded.`,
-      },
-    })
-  }
-
-  return NextResponse.json({ received: true })
-}
-
-async function handleRunwayWebhook(
-  event: string,
-  data: { generationId: string; output?: { video_url: string; thumbnail_url: string }; error?: string }
-) {
-  const { generationId, output, error } = data
-
-  const video = await prisma.video.findFirst({
-    where: {
-      metadata: {
-        path: ['externalJobId'],
-        equals: generationId,
-      },
-    },
-  })
-
-  if (!video) {
-    return NextResponse.json({ received: true })
-  }
-
-  if (event === 'SUCCEEDED' && output) {
-    await prisma.video.update({
-      where: { id: video.id },
-      data: {
-        status: 'completed',
-        videoUrl: output.video_url,
-        thumbnailUrl: output.thumbnail_url,
-        completedAt: new Date(),
+        content: `Video generation failed: ${errorMessage || 'Unknown error'}. Your credits have been refunded.`,
       },
     })
 
-    await enqueueQualityCheck({
-      id: generateId(),
-      videoId: video.id,
-      videoUrl: output.video_url,
-      createdAt: new Date().toISOString(),
-    })
-  } else if (event === 'FAILED') {
-    await prisma.video.update({
-      where: { id: video.id },
-      data: { status: 'failed' },
-    })
-
-    await prisma.user.update({
-      where: { id: video.userId },
-      data: { credits: { increment: video.duration } },
-    })
-  }
-
-  return NextResponse.json({ received: true })
-}
-
-async function handleLumaWebhook(
-  event: string,
-  data: { id: string; video?: { url: string; thumbnail_url: string }; failure_reason?: string }
-) {
-  const { id, video, failure_reason } = data
-
-  const videoRecord = await prisma.video.findFirst({
-    where: {
-      metadata: {
-        path: ['externalJobId'],
-        equals: id,
-      },
-    },
-  })
-
-  if (!videoRecord) {
-    return NextResponse.json({ received: true })
-  }
-
-  if (event === 'completed' && video) {
-    await prisma.video.update({
-      where: { id: videoRecord.id },
-      data: {
-        status: 'completed',
-        videoUrl: video.url,
-        thumbnailUrl: video.thumbnail_url,
-        completedAt: new Date(),
-      },
-    })
-
-    await enqueueQualityCheck({
-      id: generateId(),
-      videoId: videoRecord.id,
-      videoUrl: video.url,
-      createdAt: new Date().toISOString(),
-    })
-  } else if (event === 'failed') {
-    await prisma.video.update({
-      where: { id: videoRecord.id },
-      data: { status: 'failed' },
-    })
-
-    await prisma.user.update({
-      where: { id: videoRecord.userId },
-      data: { credits: { increment: videoRecord.duration } },
-    })
+    console.log(`Video ${videoData.id} failed: ${errorMessage}`)
   }
 
   return NextResponse.json({ received: true })

@@ -1,14 +1,13 @@
 // VideoCraft AI - Prisma Schema
-// Database: PostgreSQL (Supabase)
+// Database: SQLite for dev, PostgreSQL for production
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 // ===========================================
@@ -30,8 +29,6 @@ model User {
   videos          Video[]
   styleReferences StyleReference[]
 
-  @@index([email])
-  @@index([googleId])
   @@map("users")
 }
 
@@ -50,7 +47,6 @@ model Conversation {
   messages Message[]
   videos   Video[]
 
-  @@index([userId])
   @@map("conversations")
 }
 
@@ -61,14 +57,13 @@ model Message {
   id             String      @id @default(uuid())
   conversationId String      @map("conversation_id")
   role           MessageRole
-  content        String      @db.Text
-  mediaUrls      String[]    @default([]) @map("media_urls")
+  content        String
+  mediaUrls      String      @default("[]") @map("media_urls") // JSON string for SQLite
   createdAt      DateTime    @default(now()) @map("created_at")
 
   // Relationships
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  @@index([conversationId])
   @@map("messages")
 }
 
@@ -85,17 +80,17 @@ model Video {
   id                 String      @id @default(uuid())
   conversationId     String      @map("conversation_id")
   userId             String      @map("user_id")
-  prompt             String      @db.Text
+  prompt             String
   model              VideoModel
   duration           Int         // seconds (1-30)
   videoUrl           String?     @map("video_url")
   thumbnailUrl       String?     @map("thumbnail_url")
   status             VideoStatus @default(pending)
   qualityScore       Float?      @map("quality_score") // 0-10
-  qualityReport      Json?       @map("quality_report")
-  styleReferenceUrls String[]    @default([]) @map("style_reference_urls")
-  characterIds       String[]    @default([]) @map("character_ids")
-  metadata           Json?       // model-specific params
+  qualityReport      String?     @map("quality_report") // JSON string
+  styleReferenceUrls String      @default("[]") @map("style_reference_urls") // JSON string
+  characterIds       String      @default("[]") @map("character_ids") // JSON string
+  metadata           String?     // JSON string for model-specific params
   createdAt          DateTime    @default(now()) @map("created_at")
   completedAt        DateTime?   @map("completed_at")
 
@@ -103,9 +98,6 @@ model Video {
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([conversationId])
-  @@index([status])
   @@map("videos")
 }
 
@@ -132,16 +124,15 @@ model Character {
   id                String   @id @default(uuid())
   userId            String   @map("user_id")
   name              String
-  description       String   @db.Text
+  description       String
   referenceImageUrl String?  @map("reference_image_url")
-  embeddingData     Json?    @map("embedding_data") // AI-extracted features
+  embeddingData     String?  @map("embedding_data") // JSON string
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   // Relationships
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
   @@map("characters")
 }
 
@@ -153,14 +144,13 @@ model StyleReference {
   userId         String          @map("user_id")
   sourceUrl      String          @map("source_url")
   sourceType     StyleSourceType @map("source_type")
-  colorPalette   Json?           @map("color_palette") // hex codes array
-  styleEmbedding Json?           @map("style_embedding")
+  colorPalette   String?         @map("color_palette") // JSON string
+  styleEmbedding String?         @map("style_embedding") // JSON string
   createdAt      DateTime        @default(now()) @map("created_at")
 
   // Relationships
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
   @@map("style_references")
 }
 
@@ -177,15 +167,13 @@ model GenerationJob {
   videoId        String    @unique @map("video_id")
   status         JobStatus @default(queued)
   attempts       Int       @default(0)
-  lastError      String?   @map("last_error") @db.Text
+  lastError      String?   @map("last_error")
   externalJobId  String?   @map("external_job_id") // Model provider's job ID
-  webhookPayload Json?     @map("webhook_payload")
+  webhookPayload String?   @map("webhook_payload") // JSON string
   createdAt      DateTime  @default(now()) @map("created_at")
   startedAt      DateTime? @map("started_at")
   completedAt    DateTime? @map("completed_at")
 
-  @@index([status])
-  @@index([videoId])
   @@map("generation_jobs")
 }
 

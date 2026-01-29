@@ -52,10 +52,9 @@ export async function POST(request: NextRequest) {
     // Check user credits
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { credits: true },
     })
 
-    if (!user || user.credits < duration) {
+    if (!user || (user as { credits: number }).credits < duration) {
       return NextResponse.json(
         { error: 'Insufficient credits for this generation' },
         { status: 402 }
@@ -130,7 +129,7 @@ export async function POST(request: NextRequest) {
       videoId: video.id,
       conversationId: convId,
       estimatedTime: modelInfo.estimatedTime,
-      creditsRemaining: user.credits - duration,
+      creditsRemaining: (user as { credits: number }).credits - duration,
     })
   } catch (error) {
     console.error('Generation error:', error)
@@ -153,18 +152,6 @@ export async function GET(request: NextRequest) {
   try {
     const video = await prisma.video.findUnique({
       where: { id: videoId },
-      select: {
-        id: true,
-        status: true,
-        videoUrl: true,
-        thumbnailUrl: true,
-        qualityScore: true,
-        qualityReport: true,
-        model: true,
-        duration: true,
-        createdAt: true,
-        completedAt: true,
-      },
     })
 
     if (!video) {

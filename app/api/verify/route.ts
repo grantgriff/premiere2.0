@@ -65,17 +65,14 @@ export async function GET(request: NextRequest) {
   try {
     const video = await prisma.video.findUnique({
       where: { id: videoId },
-      select: {
-        qualityScore: true,
-        qualityReport: true,
-      },
     })
 
     if (!video) {
       return NextResponse.json({ error: 'Video not found' }, { status: 404 })
     }
 
-    if (!video.qualityReport) {
+    const videoData = video as { qualityScore: number | null; qualityReport: unknown }
+    if (!videoData.qualityReport) {
       return NextResponse.json(
         { error: 'Quality report not yet available' },
         { status: 404 }
@@ -83,8 +80,8 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      qualityScore: video.qualityScore,
-      report: video.qualityReport,
+      qualityScore: videoData.qualityScore,
+      report: videoData.qualityReport,
     })
   } catch (error) {
     console.error('Get quality report error:', error)
