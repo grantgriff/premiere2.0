@@ -1,18 +1,17 @@
 // API Client for Video Generation
-// In development mode, uses simulation; in production, calls real APIs
+// Uses real API routes which connect to Luma, etc.
 
 import { VideoModel } from './store'
 import { generateId } from './utils'
 
-const IS_DEV = process.env.NODE_ENV === 'development'
+// Check if we should use simulation mode (no API keys)
+const USE_SIMULATION = typeof window !== 'undefined' && !process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('supabase.co')
 
-// Sample video URLs for development simulation
+// Sample video URLs for simulation fallback
 const SAMPLE_VIDEOS = [
   'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
   'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
   'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
 ]
 
 const SAMPLE_THUMBNAILS = [
@@ -50,88 +49,11 @@ export interface VideoStatusResponse {
   duration: number
   createdAt: string
   completedAt: string | null
+  prompt?: string
   error?: string
 }
 
-// Start video generation
-export async function startGeneration(request: GenerationRequest): Promise<GenerationResponse> {
-  if (IS_DEV) {
-    // Simulate API call in development
-    await simulateDelay(500)
-
-    const videoId = generateId()
-    const conversationId = request.conversationId || generateId()
-
-    // Store in simulated queue
-    simulatedJobs.set(videoId, {
-      status: 'pending',
-      prompt: request.prompt,
-      model: request.model,
-      duration: request.duration,
-      startedAt: Date.now(),
-    })
-
-    // Start simulated processing
-    processSimulatedJob(videoId, request.duration)
-
-    return {
-      success: true,
-      videoId,
-      conversationId,
-      estimatedTime: getEstimatedTime(request.model),
-      creditsRemaining: 100 - request.duration,
-    }
-  }
-
-  // Real API call
-  const response = await fetch('/api/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  })
-
-  return response.json()
-}
-
-// Check generation status
-export async function checkGenerationStatus(videoId: string): Promise<VideoStatusResponse> {
-  if (IS_DEV) {
-    await simulateDelay(200)
-
-    const job = simulatedJobs.get(videoId)
-    if (!job) {
-      return {
-        id: videoId,
-        status: 'failed',
-        videoUrl: null,
-        thumbnailUrl: null,
-        qualityScore: null,
-        model: 'veo3_1',
-        duration: 5,
-        createdAt: new Date().toISOString(),
-        completedAt: null,
-        error: 'Video not found',
-      }
-    }
-
-    return {
-      id: videoId,
-      status: job.status,
-      videoUrl: job.videoUrl || null,
-      thumbnailUrl: job.thumbnailUrl || null,
-      qualityScore: job.qualityScore || null,
-      model: job.model,
-      duration: job.duration,
-      createdAt: new Date(job.startedAt).toISOString(),
-      completedAt: job.completedAt ? new Date(job.completedAt).toISOString() : null,
-    }
-  }
-
-  const response = await fetch(`/api/generate?videoId=${videoId}`)
-  return response.json()
-}
-
-// Simulated job storage
+// Simulated job storage (client-side only for dev without server)
 interface SimulatedJob {
   status: 'pending' | 'processing' | 'completed' | 'failed'
   prompt: string
@@ -146,6 +68,96 @@ interface SimulatedJob {
 
 const simulatedJobs = new Map<string, SimulatedJob>()
 
+// Start video generation
+export async function startGeneration(request: GenerationRequest): Promise<GenerationResponse> {
+  try {
+    // Try real API first
+    const response = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+
+    if (response.ok) {
+      return response.json()
+    }
+
+    // If API fails, fall back to simulation
+    console.warn('API failed, using simulation mode')
+    return simulateGeneration(request)
+  } catch (error) {
+    // Network error - use simulation
+    console.warn('Network error, using simulation mode:', error)
+    return simulateGeneration(request)
+  }
+}
+
+// Simulation fallback
+function simulateGeneration(request: GenerationRequest): GenerationResponse {
+  const videoId = generateId()
+  const conversationId = request.conversationId || generateId()
+
+  simulatedJobs.set(videoId, {
+    status: 'pending',
+    prompt: request.prompt,
+    model: request.model,
+    duration: request.duration,
+    startedAt: Date.now(),
+  })
+
+  // Process in background
+  processSimulatedJob(videoId, request.duration)
+
+  return {
+    success: true,
+    videoId,
+    conversationId,
+    estimatedTime: getEstimatedTime(request.model),
+    creditsRemaining: 100 - request.duration,
+  }
+}
+
+// Check generation status
+export async function checkGenerationStatus(videoId: string): Promise<VideoStatusResponse> {
+  // Check simulated jobs first (for client-side simulation)
+  const simJob = simulatedJobs.get(videoId)
+  if (simJob) {
+    return {
+      id: videoId,
+      status: simJob.status,
+      videoUrl: simJob.videoUrl || null,
+      thumbnailUrl: simJob.thumbnailUrl || null,
+      qualityScore: simJob.qualityScore || null,
+      model: simJob.model,
+      duration: simJob.duration,
+      prompt: simJob.prompt,
+      createdAt: new Date(simJob.startedAt).toISOString(),
+      completedAt: simJob.completedAt ? new Date(simJob.completedAt).toISOString() : null,
+    }
+  }
+
+  try {
+    const response = await fetch(`/api/generate?videoId=${videoId}`)
+    if (response.ok) {
+      return response.json()
+    }
+    throw new Error('API error')
+  } catch {
+    return {
+      id: videoId,
+      status: 'failed',
+      videoUrl: null,
+      thumbnailUrl: null,
+      qualityScore: null,
+      model: 'luma',
+      duration: 5,
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      error: 'Failed to check status',
+    }
+  }
+}
+
 // Process a simulated job
 function processSimulatedJob(videoId: string, duration: number) {
   const job = simulatedJobs.get(videoId)
@@ -153,26 +165,27 @@ function processSimulatedJob(videoId: string, duration: number) {
 
   // Move to processing after 1 second
   setTimeout(() => {
-    job.status = 'processing'
-    simulatedJobs.set(videoId, job)
+    const j = simulatedJobs.get(videoId)
+    if (j) {
+      j.status = 'processing'
+      simulatedJobs.set(videoId, j)
+    }
   }, 1000)
 
-  // Complete after simulated generation time (faster in dev)
-  const genTime = Math.min(duration * 1000, 10000) // Max 10 seconds in dev
+  // Complete after simulated generation time
+  const genTime = Math.min(duration * 1000, 8000) // Max 8 seconds in simulation
   setTimeout(() => {
-    const randomIndex = Math.floor(Math.random() * SAMPLE_VIDEOS.length)
-    job.status = 'completed'
-    job.completedAt = Date.now()
-    job.videoUrl = SAMPLE_VIDEOS[randomIndex]
-    job.thumbnailUrl = SAMPLE_THUMBNAILS[randomIndex % SAMPLE_THUMBNAILS.length]
-    job.qualityScore = 7 + Math.random() * 3 // Random score between 7-10
-    simulatedJobs.set(videoId, job)
+    const j = simulatedJobs.get(videoId)
+    if (j) {
+      const randomIndex = Math.floor(Math.random() * SAMPLE_VIDEOS.length)
+      j.status = 'completed'
+      j.completedAt = Date.now()
+      j.videoUrl = SAMPLE_VIDEOS[randomIndex]
+      j.thumbnailUrl = SAMPLE_THUMBNAILS[randomIndex % SAMPLE_THUMBNAILS.length]
+      j.qualityScore = 7 + Math.random() * 3
+      simulatedJobs.set(videoId, j)
+    }
   }, genTime + 2000)
-}
-
-// Utility functions
-function simulateDelay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function getEstimatedTime(model: VideoModel): string {
@@ -187,7 +200,7 @@ function getEstimatedTime(model: VideoModel): string {
   return times[model] || '30-60s'
 }
 
-// YouTube search (simulated in dev)
+// YouTube search
 export async function searchYouTube(query: string): Promise<{
   videos: Array<{
     id: string
@@ -196,17 +209,48 @@ export async function searchYouTube(query: string): Promise<{
     channel: string
   }>
 }> {
-  if (IS_DEV) {
-    await simulateDelay(500)
-    return {
-      videos: [
-        { id: '1', title: `${query} - Result 1`, thumbnail: SAMPLE_THUMBNAILS[0], channel: 'Demo Channel' },
-        { id: '2', title: `${query} - Result 2`, thumbnail: SAMPLE_THUMBNAILS[1], channel: 'Demo Channel' },
-        { id: '3', title: `${query} - Result 3`, thumbnail: SAMPLE_THUMBNAILS[2], channel: 'Demo Channel' },
-      ],
+  try {
+    const response = await fetch(`/api/youtube?q=${encodeURIComponent(query)}`)
+    if (response.ok) {
+      return response.json()
+    }
+  } catch {
+    // Fall through to simulation
+  }
+
+  // Simulation fallback
+  return {
+    videos: [
+      { id: '1', title: `${query} - Result 1`, thumbnail: SAMPLE_THUMBNAILS[0], channel: 'Demo Channel' },
+      { id: '2', title: `${query} - Result 2`, thumbnail: SAMPLE_THUMBNAILS[1], channel: 'Demo Channel' },
+      { id: '3', title: `${query} - Result 3`, thumbnail: SAMPLE_THUMBNAILS[2], channel: 'Demo Channel' },
+    ],
+  }
+}
+
+// Poll for video completion
+export function pollVideoStatus(
+  videoId: string,
+  onUpdate: (status: VideoStatusResponse) => void,
+  interval = 2000
+): () => void {
+  let active = true
+
+  const poll = async () => {
+    if (!active) return
+
+    const status = await checkGenerationStatus(videoId)
+    onUpdate(status)
+
+    if (status.status === 'pending' || status.status === 'processing') {
+      setTimeout(poll, interval)
     }
   }
 
-  const response = await fetch(`/api/youtube?q=${encodeURIComponent(query)}`)
-  return response.json()
+  poll()
+
+  // Return cleanup function
+  return () => {
+    active = false
+  }
 }

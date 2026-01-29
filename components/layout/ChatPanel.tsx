@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Send,
   Image as ImageIcon,
@@ -9,20 +9,14 @@ import {
   AtSign,
   Loader2,
 } from 'lucide-react'
-
-type VideoModel = 'veo3_1' | 'runway' | 'luma' | 'sora' | 'odyssey' | 'world_labs'
-
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-}
+import { useAppStore, useActiveConversation, VideoModel } from '@/lib/store'
+import { startGeneration, pollVideoStatus, VideoStatusResponse } from '@/lib/api'
+import { generateId } from '@/lib/utils'
 
 const MODELS: { id: VideoModel; name: string; speed: string }[] = [
+  { id: 'luma', name: 'Luma AI', speed: '5-10s' },
   { id: 'veo3_1', name: 'Veo 3.1', speed: '45-60s' },
   { id: 'runway', name: 'Runway', speed: '30-45s' },
-  { id: 'luma', name: 'Luma AI', speed: '5-10s' },
   { id: 'sora', name: 'Sora', speed: '30-60s' },
   { id: 'odyssey', name: 'Odyssey', speed: '20-40s' },
   { id: 'world_labs', name: 'World Labs', speed: '30-45s' },
@@ -31,41 +25,173 @@ const MODELS: { id: VideoModel; name: string; speed: string }[] = [
 const DURATIONS = [1, 3, 5, 10, 15, 30]
 
 export function ChatPanel() {
-  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [selectedModel, setSelectedModel] = useState<VideoModel>('veo3_1')
-  const [selectedDuration, setSelectedDuration] = useState(5)
-  const [isGenerating, setIsGenerating] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Global state
+  const user = useAppStore((state) => state.user)
+  const selectedModel = useAppStore((state) => state.selectedModel)
+  const setSelectedModel = useAppStore((state) => state.setSelectedModel)
+  const selectedDuration = useAppStore((state) => state.selectedDuration)
+  const setSelectedDuration = useAppStore((state) => state.setSelectedDuration)
+  const isGenerating = useAppStore((state) => state.isGenerating)
+  const setIsGenerating = useAppStore((state) => state.setIsGenerating)
+  const generationProgress = useAppStore((state) => state.generationProgress)
+  const setGenerationProgress = useAppStore((state) => state.setGenerationProgress)
+
+  // Conversation state
+  const activeConversationId = useAppStore((state) => state.activeConversationId)
+  const addConversation = useAppStore((state) => state.addConversation)
+  const addMessage = useAppStore((state) => state.addMessage)
+  const addVideo = useAppStore((state) => state.addVideo)
+  const updateVideo = useAppStore((state) => state.updateVideo)
+  const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
+  const setUser = useAppStore((state) => state.setUser)
+
+  const activeConversation = useActiveConversation()
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [activeConversation?.messages])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || isGenerating) return
+    if (!input.trim() || isGenerating || !user) return
 
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: input,
-      timestamp: new Date(),
-    }
-
-    setMessages((prev) => [...prev, userMessage])
+    const prompt = input.trim()
     setInput('')
     setIsGenerating(true)
+    setGenerationProgress(0)
 
-    // Simulate generation - will be replaced with actual API call
-    setTimeout(() => {
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: `Generating ${selectedDuration}s video using ${
-          MODELS.find((m) => m.id === selectedModel)?.name
-        }...\n\nYour prompt: "${userMessage.content}"`,
-        timestamp: new Date(),
+    // Create or get conversation
+    let convId = activeConversationId
+    if (!convId) {
+      const newConv = {
+        id: generateId(),
+        title: prompt.slice(0, 40) + (prompt.length > 40 ? '...' : ''),
+        messages: [],
+        videos: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }
-      setMessages((prev) => [...prev, assistantMessage])
+      addConversation(newConv)
+      convId = newConv.id
+    }
+
+    // Add user message
+    const userMessage = {
+      id: generateId(),
+      role: 'user' as const,
+      content: prompt,
+      timestamp: new Date(),
+    }
+    addMessage(convId, userMessage)
+
+    // Add assistant "generating" message
+    addMessage(convId, {
+      id: generateId(),
+      role: 'assistant' as const,
+      content: `Generating ${selectedDuration}s video with ${MODELS.find(m => m.id === selectedModel)?.name}...`,
+      timestamp: new Date(),
+    })
+
+    try {
+      // Start generation
+      const response = await startGeneration({
+        prompt,
+        model: selectedModel,
+        duration: selectedDuration,
+        userId: user.id,
+        conversationId: convId,
+      })
+
+      if (!response.success || !response.videoId) {
+        throw new Error(response.error || 'Failed to start generation')
+      }
+
+      // Create video entry
+      const video = {
+        id: response.videoId,
+        prompt,
+        model: selectedModel,
+        duration: selectedDuration,
+        status: 'pending' as const,
+        videoUrl: null,
+        thumbnailUrl: null,
+        qualityScore: null,
+        createdAt: new Date(),
+        completedAt: null,
+      }
+      addVideo(convId, video)
+
+      // Update credits
+      if (response.creditsRemaining !== undefined && user) {
+        setUser({ ...user, credits: response.creditsRemaining })
+      }
+
+      // Poll for completion
+      pollVideoStatus(response.videoId, (status: VideoStatusResponse) => {
+        // Update progress
+        if (status.status === 'processing') {
+          const currentProgress = useAppStore.getState().generationProgress
+          setGenerationProgress(Math.min(currentProgress + 10, 90))
+        }
+
+        // Update video in store
+        updateVideo(convId!, response.videoId!, {
+          status: status.status,
+          videoUrl: status.videoUrl,
+          thumbnailUrl: status.thumbnailUrl,
+          qualityScore: status.qualityScore,
+          completedAt: status.completedAt ? new Date(status.completedAt) : null,
+        })
+
+        // Handle completion
+        if (status.status === 'completed' && status.videoUrl) {
+          setGenerationProgress(100)
+          setIsGenerating(false)
+          setCurrentVideo({
+            id: response.videoId!,
+            prompt,
+            model: selectedModel,
+            duration: selectedDuration,
+            status: 'completed',
+            videoUrl: status.videoUrl,
+            thumbnailUrl: status.thumbnailUrl,
+            qualityScore: status.qualityScore,
+            createdAt: new Date(),
+            completedAt: new Date(),
+          })
+
+          // Update assistant message
+          addMessage(convId!, {
+            id: generateId(),
+            role: 'assistant' as const,
+            content: `Video ready! ${status.qualityScore ? `Quality: ${status.qualityScore.toFixed(1)}/10` : ''}`,
+            timestamp: new Date(),
+            videoId: response.videoId,
+          })
+        } else if (status.status === 'failed') {
+          setIsGenerating(false)
+          addMessage(convId!, {
+            id: generateId(),
+            role: 'assistant' as const,
+            content: `Generation failed: ${status.error || 'Unknown error'}`,
+            timestamp: new Date(),
+          })
+        }
+      })
+    } catch (error) {
       setIsGenerating(false)
-    }, 2000)
+      addMessage(convId, {
+        id: generateId(),
+        role: 'assistant' as const,
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to generate video'}`,
+        timestamp: new Date(),
+      })
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -79,7 +205,7 @@ export function ChatPanel() {
     <aside className="w-[360px] h-full flex flex-col panel border-l border-border">
       {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 ? (
+        {!activeConversation || activeConversation.messages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center text-foreground-secondary">
               <p className="mb-2">Start a conversation to generate video</p>
@@ -87,12 +213,10 @@ export function ChatPanel() {
             </div>
           </div>
         ) : (
-          messages.map((message) => (
+          activeConversation.messages.map((message) => (
             <div
               key={message.id}
-              className={
-                message.role === 'user' ? 'message-user' : 'message-assistant'
-              }
+              className={message.role === 'user' ? 'message-user' : 'message-assistant'}
             >
               <p className="whitespace-pre-wrap">{message.content}</p>
               <p className="text-xs text-foreground-secondary mt-1 opacity-60">
@@ -106,27 +230,40 @@ export function ChatPanel() {
         )}
 
         {isGenerating && (
-          <div className="message-assistant flex items-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>Generating video...</span>
+          <div className="message-assistant">
+            <div className="flex items-center gap-2 mb-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Generating video...</span>
+            </div>
+            <div className="w-full bg-background rounded-full h-2">
+              <div
+                className="bg-accent h-2 rounded-full transition-all duration-300"
+                style={{ width: `${generationProgress}%` }}
+              />
+            </div>
+            <p className="text-xs text-foreground-secondary mt-1">
+              {generationProgress < 30 && 'Starting generation...'}
+              {generationProgress >= 30 && generationProgress < 70 && 'Processing frames...'}
+              {generationProgress >= 70 && generationProgress < 100 && 'Finalizing...'}
+              {generationProgress === 100 && 'Complete!'}
+            </p>
           </div>
         )}
+
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Model Selector */}
       <div className="px-4 py-3 border-t border-border">
-        <label className="text-xs text-foreground-secondary mb-2 block">
-          Model
-        </label>
+        <label className="text-xs text-foreground-secondary mb-2 block">Model</label>
         <div className="flex flex-wrap gap-2">
           {MODELS.map((model) => (
             <button
               key={model.id}
               onClick={() => setSelectedModel(model.id)}
-              className={`model-chip text-xs ${
-                selectedModel === model.id ? 'model-chip-active' : ''
-              }`}
+              className={`model-chip text-xs ${selectedModel === model.id ? 'model-chip-active' : ''}`}
               title={`Generation time: ${model.speed}`}
+              disabled={isGenerating}
             >
               {model.name}
             </button>
@@ -136,22 +273,25 @@ export function ChatPanel() {
 
       {/* Duration Selector */}
       <div className="px-4 py-3 border-t border-border">
-        <label className="text-xs text-foreground-secondary mb-2 block">
-          Duration
-        </label>
+        <label className="text-xs text-foreground-secondary mb-2 block">Duration</label>
         <div className="flex flex-wrap gap-2">
           {DURATIONS.map((duration) => (
             <button
               key={duration}
               onClick={() => setSelectedDuration(duration)}
-              className={`duration-chip text-xs ${
-                selectedDuration === duration ? 'duration-chip-active' : ''
-              }`}
+              className={`duration-chip text-xs ${selectedDuration === duration ? 'duration-chip-active' : ''}`}
+              disabled={isGenerating}
             >
               {duration}s
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Credits Display */}
+      <div className="px-4 py-2 border-t border-border text-xs text-foreground-secondary flex justify-between">
+        <span>Credits: {user?.credits ?? 0}</span>
+        <span>Cost: {selectedDuration} credits</span>
       </div>
 
       {/* Input Area */}
@@ -169,44 +309,26 @@ export function ChatPanel() {
             disabled={isGenerating}
           />
           <div className="absolute bottom-2 right-2 flex items-center gap-1">
-            <button
-              type="button"
-              className="btn-ghost p-1.5"
-              title="Upload image"
-            >
+            <button type="button" className="btn-ghost p-1.5" title="Upload image" disabled={isGenerating}>
               <ImageIcon className="w-4 h-4" />
             </button>
-            <button
-              type="button"
-              className="btn-ghost p-1.5"
-              title="Upload video"
-            >
+            <button type="button" className="btn-ghost p-1.5" title="Upload video" disabled={isGenerating}>
               <Video className="w-4 h-4" />
             </button>
-            <button
-              type="button"
-              className="btn-ghost p-1.5"
-              title="Search YouTube"
-            >
+            <button type="button" className="btn-ghost p-1.5" title="Search YouTube" disabled={isGenerating}>
               <Youtube className="w-4 h-4" />
             </button>
-            <button
-              type="button"
-              className="btn-ghost p-1.5"
-              title="Tag character"
-            >
+            <button type="button" className="btn-ghost p-1.5" title="Tag character" disabled={isGenerating}>
               <AtSign className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         <div className="flex items-center justify-between mt-3">
-          <span className="text-xs text-foreground-secondary">
-            {input.length}/2000
-          </span>
+          <span className="text-xs text-foreground-secondary">{input.length}/2000</span>
           <button
             type="submit"
-            disabled={!input.trim() || isGenerating}
+            disabled={!input.trim() || isGenerating || (user?.credits ?? 0) < selectedDuration}
             className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isGenerating ? (
