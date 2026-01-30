@@ -1,5 +1,4 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { createBrowserClient as createSSRBrowserClient } from '@supabase/ssr'
 
 // Get the appropriate keys (supports both new and legacy formats)
 const getSupabaseUrl = () => process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -18,21 +17,39 @@ export const supabase = createClient(
   getSecretKey() || getPublicKey()
 )
 
-// Client-side Supabase client using SSR package (handles cookies properly)
+// Singleton browser client - stored globally to prevent multiple instances
 let browserClient: SupabaseClient | null = null
 
-export const createBrowserClient = () => {
+// Create or return the singleton browser client
+export const createBrowserClient = (): SupabaseClient => {
   if (typeof window === 'undefined') {
-    // Server-side: create a new client each time
-    return createClient(getSupabaseUrl(), getPublicKey())
+    // Server-side: create a basic client (no persistence needed)
+    return createClient(getSupabaseUrl(), getPublicKey(), {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      }
+    })
   }
 
-  // Client-side: use SSR browser client for proper cookie handling
+  // Client-side: ensure only ONE instance exists
   if (!browserClient) {
-    browserClient = createSSRBrowserClient(getSupabaseUrl(), getPublicKey())
+    browserClient = createClient(getSupabaseUrl(), getPublicKey(), {
+      auth: {
+        persistSession: true,
+        storageKey: 'premiere2-auth',
+        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+        flowType: 'pkce',
+        detectSessionInUrl: true,
+        autoRefreshToken: true,
+      }
+    })
   }
   return browserClient
 }
+
+// Get the singleton client (alias for consistency)
+export const getBrowserClient = createBrowserClient
 
 // Get server client with auth context (for API routes)
 export const createServerClient = () => {

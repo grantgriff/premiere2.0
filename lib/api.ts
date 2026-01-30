@@ -20,6 +20,13 @@ const SAMPLE_THUMBNAILS = [
   'https://storage.googleapis.com/gtv-videos-bucket/sample/images/ForBiggerBlazes.jpg',
 ]
 
+export interface StyleReference {
+  type: 'youtube' | 'upload' | 'url'
+  url: string
+  videoId?: string
+  title?: string
+}
+
 export interface GenerationRequest {
   prompt: string
   model: VideoModel
@@ -27,6 +34,7 @@ export interface GenerationRequest {
   userId: string
   conversationId?: string
   styleReferenceUrls?: string[]
+  styleReferences?: StyleReference[]
   characterIds?: string[]
 }
 

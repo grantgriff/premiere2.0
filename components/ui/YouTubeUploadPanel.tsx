@@ -159,6 +159,7 @@ export function YouTubeUploadPanel({
       }
 
       // Create upload record
+      // When scheduling, YouTube requires 'private' visibility until scheduled time
       const upload: YouTubeUpload = {
         id: generateId(),
         videoId: video.id,
@@ -167,7 +168,7 @@ export function YouTubeUploadPanel({
         title,
         description,
         tags,
-        visibility: scheduleEnabled ? 'scheduled' : visibility,
+        visibility: scheduleEnabled ? 'private' : visibility,
         scheduledPublishAt: scheduleEnabled
           ? new Date(`${scheduledDate}T${scheduledTime}`)
           : null,

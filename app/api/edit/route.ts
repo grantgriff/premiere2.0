@@ -348,7 +348,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let sourceUrl = videoUrl
+    let sourceUrl: string | null = videoUrl
 
     if (!sourceUrl && videoId) {
       const video = await prisma.video.findUnique({
@@ -357,7 +357,7 @@ export async function GET(request: NextRequest) {
       if (!video || !video.videoUrl) {
         return NextResponse.json({ error: 'Video not found' }, { status: 404 })
       }
-      sourceUrl = video.videoUrl
+      sourceUrl = video.videoUrl as string
     }
 
     const info = await getVideoInfo(sourceUrl!)
