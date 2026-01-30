@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createBrowserClient as createSSRBrowserClient } from '@supabase/ssr'
 
 // Get the appropriate keys (supports both new and legacy formats)
 const getSupabaseUrl = () => process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -17,7 +18,7 @@ export const supabase = createClient(
   getSecretKey() || getPublicKey()
 )
 
-// Client-side Supabase client (for use in components)
+// Client-side Supabase client using SSR package (handles cookies properly)
 let browserClient: SupabaseClient | null = null
 
 export const createBrowserClient = () => {
@@ -26,9 +27,9 @@ export const createBrowserClient = () => {
     return createClient(getSupabaseUrl(), getPublicKey())
   }
 
-  // Client-side: reuse the same client instance
+  // Client-side: use SSR browser client for proper cookie handling
   if (!browserClient) {
-    browserClient = createClient(getSupabaseUrl(), getPublicKey())
+    browserClient = createSSRBrowserClient(getSupabaseUrl(), getPublicKey())
   }
   return browserClient
 }
