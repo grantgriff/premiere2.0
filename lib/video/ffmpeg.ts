@@ -248,17 +248,16 @@ export async function extendVideo(
         break
     }
 
-    if (options.method !== 'loop') {
-      await execFFmpeg([
-        '-y',
-        '-i', inputPath,
-        '-filter_complex', filterComplex,
-        '-map', '[v]',
-        '-c:v', 'libx264',
-        '-preset', 'fast',
-        outputPath,
-      ])
-    }
+    // 'loop' case returns early, so we only reach here for 'freeze' or 'reverse'
+    await execFFmpeg([
+      '-y',
+      '-i', inputPath,
+      '-filter_complex', filterComplex,
+      '-map', '[v]',
+      '-c:v', 'libx264',
+      '-preset', 'fast',
+      outputPath,
+    ])
 
     const { readFile } = await import('fs/promises')
     const result = await readFile(outputPath)

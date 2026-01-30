@@ -1,5 +1,5 @@
 import { createBrowserClient } from './supabase'
-import type { User, Session } from '@supabase/supabase-js'
+import type { Session } from '@supabase/supabase-js'
 
 export type AuthUser = {
   id: string
@@ -8,8 +8,25 @@ export type AuthUser = {
   avatarUrl: string | null
 }
 
+// Clear any stale auth state before new login
+function clearStaleAuthState() {
+  if (typeof window === 'undefined') return
+
+  // Clear any stale PKCE verifiers from localStorage
+  const keysToRemove: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && (key.includes('code-verifier') || key.includes('pkce'))) {
+      keysToRemove.push(key)
+    }
+  }
+  keysToRemove.forEach(key => localStorage.removeItem(key))
+}
+
 // Sign in with Google OAuth
 export async function signInWithGoogle(redirectTo?: string) {
+  clearStaleAuthState()
+
   const supabase = createBrowserClient()
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
@@ -32,6 +49,8 @@ export async function signInWithGoogle(redirectTo?: string) {
 
 // Sign in with GitHub OAuth
 export async function signInWithGitHub(redirectTo?: string) {
+  clearStaleAuthState()
+
   const supabase = createBrowserClient()
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'github',
