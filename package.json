@@ -1,7 +1,10 @@
 {
-  "name": "videocraft-ai",
+  "name": "premiere2",
   "version": "0.1.0",
   "private": true,
+  "overrides": {
+    "node-domexception": "1.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
