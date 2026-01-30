@@ -283,3 +283,89 @@ export const useActiveConversation = () => {
 export const useUserCredits = () => {
   return useAppStore((state) => state.user?.credits ?? 0)
 }
+
+// Analytics selectors
+export const useAnalytics = () => {
+  const conversations = useAppStore((state) => state.conversations)
+  const youtubeUploads = useAppStore((state) => state.youtubeUploads)
+  const characters = useAppStore((state) => state.characters)
+
+  // Flatten all videos from conversations
+  const allVideos = conversations.flatMap((c) => c.videos)
+
+  // Total stats
+  const totalVideos = allVideos.length
+  const completedVideos = allVideos.filter((v) => v.status === 'completed').length
+  const failedVideos = allVideos.filter((v) => v.status === 'failed').length
+  const totalDuration = allVideos.reduce((sum, v) => sum + v.duration, 0)
+
+  // Quality stats
+  const videosWithQuality = allVideos.filter((v) => v.qualityScore !== null)
+  const avgQualityScore =
+    videosWithQuality.length > 0
+      ? videosWithQuality.reduce((sum, v) => sum + (v.qualityScore || 0), 0) /
+        videosWithQuality.length
+      : 0
+
+  // Model usage
+  const modelUsage = allVideos.reduce((acc, v) => {
+    acc[v.model] = (acc[v.model] || 0) + 1
+    return acc
+  }, {} as Record<VideoModel, number>)
+
+  // Model quality scores
+  const modelQuality = allVideos.reduce((acc, v) => {
+    if (v.qualityScore !== null) {
+      if (!acc[v.model]) {
+        acc[v.model] = { total: 0, count: 0 }
+      }
+      acc[v.model].total += v.qualityScore
+      acc[v.model].count += 1
+    }
+    return acc
+  }, {} as Record<VideoModel, { total: number; count: number }>)
+
+  const modelAvgQuality = Object.entries(modelQuality).reduce((acc, [model, data]) => {
+    acc[model as VideoModel] = data.total / data.count
+    return acc
+  }, {} as Record<VideoModel, number>)
+
+  // Recent videos (last 7 days)
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const recentVideos = allVideos.filter((v) => new Date(v.createdAt) >= sevenDaysAgo)
+
+  // Daily generation counts for chart
+  const dailyGenerations = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date()
+    date.setDate(date.getDate() - (6 - i))
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
+
+    const count = allVideos.filter((v) => {
+      const created = new Date(v.createdAt)
+      return created >= dayStart && created < dayEnd
+    }).length
+
+    return {
+      date: dayStart.toLocaleDateString('en-US', { weekday: 'short' }),
+      count,
+    }
+  })
+
+  return {
+    totalVideos,
+    completedVideos,
+    failedVideos,
+    totalDuration,
+    avgQualityScore,
+    modelUsage,
+    modelAvgQuality,
+    recentVideos,
+    dailyGenerations,
+    totalUploads: youtubeUploads.length,
+    publishedUploads: youtubeUploads.filter((u) => u.status === 'published').length,
+    totalCharacters: characters.length,
+    readyCharacters: characters.filter((c) => c.embeddingStatus === 'ready').length,
+  }
+}
+
