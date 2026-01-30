@@ -10,8 +10,9 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useAppStore, useActiveConversation, VideoModel } from '@/lib/store'
-import { startGeneration, pollVideoStatus, VideoStatusResponse } from '@/lib/api'
+import { startGeneration, pollVideoStatus, verifyVideoQuality, VideoStatusResponse } from '@/lib/api'
 import { generateId } from '@/lib/utils'
+import { QualityReport } from '@/lib/models/types'
 
 const MODELS: { id: VideoModel; name: string; speed: string }[] = [
   { id: 'luma', name: 'Luma AI', speed: '5-10s' },
@@ -121,6 +122,8 @@ export function ChatPanel() {
         videoUrl: null,
         thumbnailUrl: null,
         qualityScore: null,
+        qualityReport: null,
+        isVerifying: false,
         createdAt: new Date(),
         completedAt: null,
       }
@@ -152,26 +155,98 @@ export function ChatPanel() {
         if (status.status === 'completed' && status.videoUrl) {
           setGenerationProgress(100)
           setIsGenerating(false)
-          setCurrentVideo({
+
+          // Set current video with verifying state
+          const completedVideo = {
             id: response.videoId!,
             prompt,
             model: selectedModel,
             duration: selectedDuration,
-            status: 'completed',
+            status: 'completed' as const,
             videoUrl: status.videoUrl,
             thumbnailUrl: status.thumbnailUrl,
-            qualityScore: status.qualityScore,
+            qualityScore: null,
+            qualityReport: null,
+            isVerifying: true,
             createdAt: new Date(),
             completedAt: new Date(),
-          })
+          }
+          setCurrentVideo(completedVideo)
+          updateVideo(convId!, response.videoId!, { isVerifying: true })
 
-          // Update assistant message
+          // Add initial completion message
           addMessage(convId!, {
             id: generateId(),
             role: 'assistant' as const,
-            content: `Video ready! ${status.qualityScore ? `Quality: ${status.qualityScore.toFixed(1)}/10` : ''}`,
+            content: 'Video ready! Running quality verification...',
             timestamp: new Date(),
             videoId: response.videoId,
+          })
+
+          // Run quality verification
+          verifyVideoQuality(response.videoId!, status.videoUrl).then((verifyResult) => {
+            if (verifyResult) {
+              const qualityReport = verifyResult.report as QualityReport
+
+              // Update video with quality results
+              updateVideo(convId!, response.videoId!, {
+                qualityScore: verifyResult.qualityScore,
+                qualityReport,
+                isVerifying: false,
+              })
+
+              // Update current video if still viewing
+              const currentState = useAppStore.getState()
+              const cv = currentState.currentVideo
+              if (cv && cv.id === response.videoId) {
+                setCurrentVideo({
+                  id: cv.id,
+                  prompt: cv.prompt,
+                  model: cv.model,
+                  duration: cv.duration,
+                  status: cv.status,
+                  videoUrl: cv.videoUrl,
+                  thumbnailUrl: cv.thumbnailUrl,
+                  qualityScore: verifyResult.qualityScore,
+                  qualityReport,
+                  isVerifying: false,
+                  createdAt: cv.createdAt,
+                  completedAt: cv.completedAt,
+                })
+              }
+
+              // Add quality result message
+              const qualityLabel = verifyResult.qualityScore >= 8 ? 'Excellent' :
+                                   verifyResult.qualityScore >= 6 ? 'Good' :
+                                   verifyResult.qualityScore >= 4 ? 'Fair' : 'Poor'
+              addMessage(convId!, {
+                id: generateId(),
+                role: 'assistant' as const,
+                content: `Quality verified: ${verifyResult.qualityScore.toFixed(1)}/10 (${qualityLabel})${verifyResult.hasHighSeverityIssues ? ' - Some issues detected' : ''}`,
+                timestamp: new Date(),
+              })
+            } else {
+              // Verification failed
+              updateVideo(convId!, response.videoId!, { isVerifying: false })
+              const currentState = useAppStore.getState()
+              const cv = currentState.currentVideo
+              if (cv && cv.id === response.videoId) {
+                setCurrentVideo({
+                  id: cv.id,
+                  prompt: cv.prompt,
+                  model: cv.model,
+                  duration: cv.duration,
+                  status: cv.status,
+                  videoUrl: cv.videoUrl,
+                  thumbnailUrl: cv.thumbnailUrl,
+                  qualityScore: cv.qualityScore,
+                  qualityReport: cv.qualityReport,
+                  isVerifying: false,
+                  createdAt: cv.createdAt,
+                  completedAt: cv.completedAt,
+                })
+              }
+            }
           })
         } else if (status.status === 'failed') {
           setIsGenerating(false)

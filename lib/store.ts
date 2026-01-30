@@ -1,6 +1,7 @@
 // Global State Management with Zustand
 import { create } from 'zustand'
 import { DEMO_USER } from './db'
+import { QualityReport } from './models/types'
 
 // Types
 export type VideoModel = 'veo3_1' | 'runway' | 'luma' | 'sora' | 'odyssey' | 'world_labs'
@@ -23,6 +24,8 @@ export interface Video {
   videoUrl: string | null
   thumbnailUrl: string | null
   qualityScore: number | null
+  qualityReport: QualityReport | null
+  isVerifying: boolean
   createdAt: Date
   completedAt: Date | null
 }
