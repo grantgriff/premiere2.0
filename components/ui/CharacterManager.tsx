@@ -9,6 +9,8 @@ import {
   Loader2,
   Sparkles,
   Search,
+  Wand2,
+  ImageIcon,
 } from 'lucide-react'
 import { useAppStore, Character } from '@/lib/store'
 import { CharacterCard } from './CharacterCard'
@@ -22,6 +24,7 @@ interface CharacterManagerProps {
 }
 
 type ViewMode = 'grid' | 'create' | 'edit'
+type CreateMode = 'upload' | 'generate'
 
 export function CharacterManager({
   isOpen,
@@ -30,6 +33,7 @@ export function CharacterManager({
   selectionMode = false,
 }: CharacterManagerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [createMode, setCreateMode] = useState<CreateMode>('upload')
   const [searchQuery, setSearchQuery] = useState('')
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
 
@@ -39,6 +43,11 @@ export function CharacterManager({
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+
+  // Generate mode state
+  const [generatePrompt, setGeneratePrompt] = useState('')
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -82,6 +91,9 @@ export function CharacterManager({
     setImagePreview(null)
     setEditingCharacter(null)
     setViewMode('grid')
+    setCreateMode('upload')
+    setGeneratePrompt('')
+    setGeneratedImage(null)
   }
 
   // Handle create
@@ -112,6 +124,41 @@ export function CharacterManager({
     }, 3000)
 
     setIsUploading(false)
+    resetForm()
+  }
+
+  // Handle AI generate character
+  const handleGenerate = async () => {
+    if (!name.trim() || !generatePrompt.trim()) return
+
+    setIsGenerating(true)
+
+    // Simulate AI image generation
+    await new Promise((resolve) => setTimeout(resolve, 2500))
+
+    // For demo, use a placeholder generated image
+    // In production, this would call an AI image generation API
+    const placeholderImage = `https://api.dicebear.com/7.x/personas/svg?seed=${encodeURIComponent(name + generatePrompt)}&backgroundColor=b6e3f4,c0aede,d1d4f9`
+
+    const newCharacter: Character = {
+      id: generateId(),
+      name: name.trim(),
+      description: description.trim() || generatePrompt.trim(),
+      referenceImageUrl: placeholderImage,
+      thumbnailUrl: placeholderImage,
+      embeddingStatus: 'processing',
+      createdAt: new Date(),
+      usageCount: 0,
+    }
+
+    addCharacter(newCharacter)
+
+    // Simulate embedding processing
+    setTimeout(() => {
+      updateCharacter(newCharacter.id, { embeddingStatus: 'ready' })
+    }, 3000)
+
+    setIsGenerating(false)
     resetForm()
   }
 
@@ -273,39 +320,104 @@ export function CharacterManager({
           ) : (
             /* Create/Edit form */
             <div className="space-y-6">
-              {/* Image upload */}
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Reference Image
-                </label>
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="relative w-full aspect-video rounded-lg border-2 border-dashed border-border hover:border-accent/50 cursor-pointer overflow-hidden transition-colors"
-                >
-                  {imagePreview ? (
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-foreground-secondary">
-                      <Upload className="w-8 h-8 mb-2" />
-                      <p className="text-sm">Click to upload image</p>
-                      <p className="text-xs text-foreground-secondary/60 mt-1">
-                        Clear face shot recommended
-                      </p>
+              {/* Mode selector - only show in create mode, not edit */}
+              {viewMode === 'create' && (
+                <div className="flex rounded-lg bg-background-secondary p-1">
+                  <button
+                    onClick={() => setCreateMode('upload')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                      createMode === 'upload'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-foreground-secondary hover:text-foreground'
+                    }`}
+                  >
+                    <Upload className="w-4 h-4" />
+                    Upload Photo
+                  </button>
+                  <button
+                    onClick={() => setCreateMode('generate')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                      createMode === 'generate'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-foreground-secondary hover:text-foreground'
+                    }`}
+                  >
+                    <Wand2 className="w-4 h-4" />
+                    Generate with AI
+                  </button>
+                </div>
+              )}
+
+              {/* Image upload - show in upload mode or edit mode */}
+              {(createMode === 'upload' || viewMode === 'edit') && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Reference Image
+                  </label>
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="relative w-full aspect-video rounded-lg border-2 border-dashed border-border hover:border-accent/50 cursor-pointer overflow-hidden transition-colors"
+                  >
+                    {imagePreview ? (
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-foreground-secondary">
+                        <Upload className="w-8 h-8 mb-2" />
+                        <p className="text-sm">Click to upload image</p>
+                        <p className="text-xs text-foreground-secondary/60 mt-1">
+                          Clear face shot recommended
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </div>
+              )}
+
+              {/* AI Generation prompt - only in generate mode */}
+              {createMode === 'generate' && viewMode === 'create' && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Character Description
+                  </label>
+                  <textarea
+                    value={generatePrompt}
+                    onChange={(e) => setGeneratePrompt(e.target.value)}
+                    placeholder="Describe the character you want to generate...&#10;&#10;e.g., 'A young woman with curly red hair, green eyes, freckles, and a warm smile. Professional headshot style.'"
+                    rows={4}
+                    className="w-full px-4 py-3 rounded-lg bg-background-secondary border border-border text-sm focus:outline-none focus:border-accent resize-none"
+                  />
+                  <p className="mt-2 text-xs text-foreground-secondary">
+                    Be specific about facial features, hair, expression, and style for best results.
+                  </p>
+
+                  {/* Preview of generated image */}
+                  {generatedImage && (
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Generated Preview
+                      </label>
+                      <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-border">
+                        <img
+                          src={generatedImage}
+                          alt="Generated preview"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-              </div>
+              )}
 
               {/* Name */}
               <div>
@@ -339,10 +451,23 @@ export function CharacterManager({
               <div className="flex items-start gap-3 p-4 rounded-lg bg-accent/5 border border-accent/20">
                 <Sparkles className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
                 <div className="text-sm">
-                  <p className="text-foreground font-medium">AI Face Embedding</p>
+                  <p className="text-foreground font-medium">
+                    {createMode === 'generate' && viewMode === 'create'
+                      ? 'AI Character Generation'
+                      : 'AI Face Embedding'}
+                  </p>
                   <p className="text-foreground-secondary mt-1">
-                    When you save this character, we'll extract facial features to maintain
-                    consistency across your video generations. Use @{name || 'name'} in your prompts.
+                    {createMode === 'generate' && viewMode === 'create' ? (
+                      <>
+                        We'll generate a unique character based on your description, then extract
+                        facial features for consistency. Use @{name || 'name'} in your prompts.
+                      </>
+                    ) : (
+                      <>
+                        When you save this character, we'll extract facial features to maintain
+                        consistency across your video generations. Use @{name || 'name'} in your prompts.
+                      </>
+                    )}
                   </p>
                 </div>
               </div>
@@ -387,23 +512,43 @@ export function CharacterManager({
               <button
                 onClick={resetForm}
                 className="btn-secondary"
-                disabled={isUploading}
+                disabled={isUploading || isGenerating}
               >
                 Cancel
               </button>
               <button
-                onClick={viewMode === 'create' ? handleCreate : handleEdit}
-                disabled={!name.trim() || isUploading}
+                onClick={
+                  viewMode === 'edit'
+                    ? handleEdit
+                    : createMode === 'generate'
+                    ? handleGenerate
+                    : handleCreate
+                }
+                disabled={
+                  !name.trim() ||
+                  isUploading ||
+                  isGenerating ||
+                  (createMode === 'generate' && viewMode === 'create' && !generatePrompt.trim())
+                }
                 className="btn-primary flex items-center gap-2 disabled:opacity-50"
               >
-                {isUploading ? (
+                {isUploading || isGenerating ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    {viewMode === 'create' ? 'Creating...' : 'Saving...'}
+                    {isGenerating ? 'Generating...' : viewMode === 'create' ? 'Creating...' : 'Saving...'}
                   </>
                 ) : (
                   <>
-                    {viewMode === 'create' ? 'Create Character' : 'Save Changes'}
+                    {viewMode === 'edit' ? (
+                      'Save Changes'
+                    ) : createMode === 'generate' ? (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        Generate Character
+                      </>
+                    ) : (
+                      'Create Character'
+                    )}
                   </>
                 )}
               </button>
