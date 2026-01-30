@@ -37,9 +37,9 @@ interface VeoGenerateResponse {
 }
 
 export async function generateWithVeo(params: GenerationParams): Promise<GenerationResult> {
-  const apiKey = process.env.GOOGLE_VEO_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
-    return { success: false, error: 'Veo API key not configured' }
+    return { success: false, error: 'Gemini API key not configured (needed for Veo)' }
   }
 
   try {
@@ -101,9 +101,9 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
 }
 
 export async function checkVeoStatus(operationName: string): Promise<GenerationStatus> {
-  const apiKey = process.env.GOOGLE_VEO_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
-    return { status: 'failed', error: 'Veo API key not configured' }
+    return { status: 'failed', error: 'Gemini API key not configured' }
   }
 
   try {
