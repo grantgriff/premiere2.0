@@ -12,10 +12,13 @@ import {
   VolumeX,
   Loader2,
   Shield,
+  Youtube,
+  Share2,
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { QualityBadge } from '@/components/ui/QualityBadge'
 import { QualityReport } from '@/lib/models/types'
+import { YouTubeUploadPanel } from '@/components/ui/YouTubeUploadPanel'
 
 export function VideoPanel() {
   const currentVideo = useAppStore((state) => state.currentVideo)
@@ -27,6 +30,7 @@ export function VideoPanel() {
   const [isMuted, setIsMuted] = useState(false)
   const [progress, setProgress] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
+  const [showYouTubeUpload, setShowYouTubeUpload] = useState(false)
 
   // Handle video time updates
   useEffect(() => {
@@ -242,6 +246,14 @@ export function VideoPanel() {
                   <Scissors className="w-4 h-4" />
                   Edit Segment
                 </button>
+                <div className="flex-1" />
+                <button
+                  onClick={() => setShowYouTubeUpload(true)}
+                  className="btn-primary flex items-center gap-2 bg-red-500 hover:bg-red-600"
+                >
+                  <Youtube className="w-4 h-4" />
+                  Upload to YouTube
+                </button>
               </div>
             </div>
           </div>
@@ -287,6 +299,13 @@ export function VideoPanel() {
           </div>
         )}
       </div>
+
+      {/* YouTube Upload Panel */}
+      <YouTubeUploadPanel
+        isOpen={showYouTubeUpload}
+        onClose={() => setShowYouTubeUpload(false)}
+        video={currentVideo}
+      />
     </main>
   )
 }

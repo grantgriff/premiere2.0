@@ -58,6 +58,37 @@ export interface Character {
   usageCount: number
 }
 
+// YouTube types
+export type YouTubeUploadStatus = 'pending' | 'uploading' | 'processing' | 'published' | 'scheduled' | 'failed'
+export type YouTubeVisibility = 'public' | 'unlisted' | 'private'
+
+export interface YouTubeUpload {
+  id: string
+  videoId: string
+  youtubeVideoId: string | null
+  youtubeUrl: string | null
+  title: string
+  description: string
+  tags: string[]
+  visibility: YouTubeVisibility
+  scheduledPublishAt: Date | null
+  status: YouTubeUploadStatus
+  uploadProgress: number
+  error: string | null
+  createdAt: Date
+  publishedAt: Date | null
+}
+
+export interface YouTubeChannel {
+  id: string
+  channelId: string
+  channelName: string
+  channelThumbnail: string | null
+  subscriberCount: number
+  isConnected: boolean
+  connectedAt: Date | null
+}
+
 interface AppState {
   // User
   user: User | null
@@ -101,6 +132,14 @@ interface AppState {
   selectedCharacterIds: string[]
   toggleCharacterSelection: (id: string) => void
   clearCharacterSelection: () => void
+
+  // YouTube
+  youtubeChannel: YouTubeChannel | null
+  setYouTubeChannel: (channel: YouTubeChannel | null) => void
+  youtubeUploads: YouTubeUpload[]
+  addYouTubeUpload: (upload: YouTubeUpload) => void
+  updateYouTubeUpload: (id: string, updates: Partial<YouTubeUpload>) => void
+  deleteYouTubeUpload: (id: string) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -213,6 +252,25 @@ export const useAppStore = create<AppState>((set, get) => ({
         : [...state.selectedCharacterIds, id],
     })),
   clearCharacterSelection: () => set({ selectedCharacterIds: [] }),
+
+  // YouTube
+  youtubeChannel: null,
+  setYouTubeChannel: (channel) => set({ youtubeChannel: channel }),
+  youtubeUploads: [],
+  addYouTubeUpload: (upload) =>
+    set((state) => ({
+      youtubeUploads: [upload, ...state.youtubeUploads],
+    })),
+  updateYouTubeUpload: (id, updates) =>
+    set((state) => ({
+      youtubeUploads: state.youtubeUploads.map((u) =>
+        u.id === id ? { ...u, ...updates } : u
+      ),
+    })),
+  deleteYouTubeUpload: (id) =>
+    set((state) => ({
+      youtubeUploads: state.youtubeUploads.filter((u) => u.id !== id),
+    })),
 }))
 
 // Selectors

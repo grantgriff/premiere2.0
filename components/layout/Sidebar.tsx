@@ -11,8 +11,10 @@ import {
   Sparkles,
   ChevronDown,
   ChevronRight,
+  Youtube,
 } from 'lucide-react'
 import { useAppStore, Conversation } from '@/lib/store'
+import { YouTubeConnect } from '@/components/ui/YouTubeConnect'
 
 // Group conversations by date
 function groupConversationsByDate(conversations: Conversation[]) {
@@ -278,6 +280,11 @@ export function Sidebar() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* YouTube Connection */}
+      <div className="px-3 py-2 border-t border-[#2a2a2a]">
+        <YouTubeConnect compact />
       </div>
 
       {/* User footer */}
