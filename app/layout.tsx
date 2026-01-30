@@ -3,7 +3,7 @@ import './globals.css'
 import { Providers } from './providers'
 
 export const metadata: Metadata = {
-  title: 'VideoCraft AI - Model-Agnostic Video Generation Platform',
+  title: 'Premiere 2 - AI Video Generation Platform',
   description: 'Generate high-quality AI videos from text, images, or video inputs using multiple cutting-edge AI models.',
   keywords: ['AI video generation', 'text-to-video', 'Veo', 'Runway', 'Luma AI', 'Sora'],
 }
