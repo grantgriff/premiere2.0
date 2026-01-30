@@ -8,11 +8,15 @@ import {
   Youtube,
   AtSign,
   Loader2,
+  X,
+  User,
 } from 'lucide-react'
 import { useAppStore, useActiveConversation, VideoModel } from '@/lib/store'
 import { startGeneration, pollVideoStatus, verifyVideoQuality, VideoStatusResponse } from '@/lib/api'
 import { generateId } from '@/lib/utils'
 import { QualityReport } from '@/lib/models/types'
+import { CharacterMention, extractCharacterMentions } from '@/components/ui/CharacterMention'
+import { CharacterManager } from '@/components/ui/CharacterManager'
 
 const MODELS: { id: VideoModel; name: string; speed: string }[] = [
   { id: 'luma', name: 'Luma AI', speed: '5-10s' },
@@ -27,11 +31,15 @@ const DURATIONS = [1, 3, 5, 10, 15, 30]
 
 export function ChatPanel() {
   const [input, setInput] = useState('')
-  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [showCharacterManager, setShowCharacterManager] = useState(false)
+  const inputRef = useRef<HTMLTextAreaElement>(null) as React.RefObject<HTMLTextAreaElement>
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Global state
   const user = useAppStore((state) => state.user)
+  const characters = useAppStore((state) => state.characters)
+  const selectedCharacterIds = useAppStore((state) => state.selectedCharacterIds)
+  const toggleCharacterSelection = useAppStore((state) => state.toggleCharacterSelection)
   const selectedModel = useAppStore((state) => state.selectedModel)
   const setSelectedModel = useAppStore((state) => state.setSelectedModel)
   const selectedDuration = useAppStore((state) => state.selectedDuration)
@@ -369,6 +377,41 @@ export function ChatPanel() {
         <span>Cost: {selectedDuration} credits</span>
       </div>
 
+      {/* Selected Characters */}
+      {selectedCharacterIds.length > 0 && (
+        <div className="px-4 py-2 border-t border-border">
+          <label className="text-xs text-foreground-secondary mb-2 block">Characters</label>
+          <div className="flex flex-wrap gap-2">
+            {selectedCharacterIds.map((id) => {
+              const char = characters.find((c) => c.id === id)
+              if (!char) return null
+              return (
+                <div
+                  key={id}
+                  className="flex items-center gap-1.5 px-2 py-1 bg-accent/10 rounded-full text-xs"
+                >
+                  <div className="w-4 h-4 rounded-full overflow-hidden bg-background-secondary">
+                    {char.thumbnailUrl ? (
+                      <img src={char.thumbnailUrl} alt={char.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-full h-full p-0.5 text-foreground-secondary" />
+                    )}
+                  </div>
+                  <span className="text-foreground">@{char.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleCharacterSelection(id)}
+                    className="text-foreground-secondary hover:text-foreground"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Input Area */}
       <form onSubmit={handleSubmit} className="p-4 border-t border-border">
         <div className="relative">
@@ -377,11 +420,21 @@ export function ChatPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Describe your video..."
+            placeholder="Describe your video... Use @name to tag characters"
             rows={3}
             maxLength={2000}
             className="input-field w-full resize-none pr-12"
             disabled={isGenerating}
+          />
+          <CharacterMention
+            inputRef={inputRef}
+            value={input}
+            onChange={setInput}
+            onCharacterSelect={(char) => {
+              if (!selectedCharacterIds.includes(char.id)) {
+                toggleCharacterSelection(char.id)
+              }
+            }}
           />
           <div className="absolute bottom-2 right-2 flex items-center gap-1">
             <button type="button" className="btn-ghost p-1.5" title="Upload image" disabled={isGenerating}>
@@ -393,7 +446,13 @@ export function ChatPanel() {
             <button type="button" className="btn-ghost p-1.5" title="Search YouTube" disabled={isGenerating}>
               <Youtube className="w-4 h-4" />
             </button>
-            <button type="button" className="btn-ghost p-1.5" title="Tag character" disabled={isGenerating}>
+            <button
+              type="button"
+              onClick={() => setShowCharacterManager(true)}
+              className={`btn-ghost p-1.5 ${selectedCharacterIds.length > 0 ? 'text-accent' : ''}`}
+              title="Tag character"
+              disabled={isGenerating}
+            >
               <AtSign className="w-4 h-4" />
             </button>
           </div>
@@ -420,6 +479,13 @@ export function ChatPanel() {
           </button>
         </div>
       </form>
+
+      {/* Character Manager Modal */}
+      <CharacterManager
+        isOpen={showCharacterManager}
+        onClose={() => setShowCharacterManager(false)}
+        selectionMode={true}
+      />
     </aside>
   )
 }

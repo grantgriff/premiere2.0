@@ -47,6 +47,17 @@ export interface User {
   credits: number
 }
 
+export interface Character {
+  id: string
+  name: string
+  description: string
+  referenceImageUrl: string | null
+  thumbnailUrl: string | null
+  embeddingStatus: 'pending' | 'processing' | 'ready' | 'failed'
+  createdAt: Date
+  usageCount: number
+}
+
 interface AppState {
   // User
   user: User | null
@@ -80,6 +91,16 @@ interface AppState {
   setSelectedModel: (model: VideoModel) => void
   selectedDuration: number
   setSelectedDuration: (duration: number) => void
+
+  // Characters
+  characters: Character[]
+  setCharacters: (characters: Character[]) => void
+  addCharacter: (character: Character) => void
+  updateCharacter: (id: string, updates: Partial<Character>) => void
+  deleteCharacter: (id: string) => void
+  selectedCharacterIds: string[]
+  toggleCharacterSelection: (id: string) => void
+  clearCharacterSelection: () => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -165,6 +186,33 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedModel: (model) => set({ selectedModel: model }),
   selectedDuration: 5,
   setSelectedDuration: (duration) => set({ selectedDuration: duration }),
+
+  // Characters
+  characters: [],
+  setCharacters: (characters) => set({ characters }),
+  addCharacter: (character) =>
+    set((state) => ({
+      characters: [character, ...state.characters],
+    })),
+  updateCharacter: (id, updates) =>
+    set((state) => ({
+      characters: state.characters.map((c) =>
+        c.id === id ? { ...c, ...updates } : c
+      ),
+    })),
+  deleteCharacter: (id) =>
+    set((state) => ({
+      characters: state.characters.filter((c) => c.id !== id),
+      selectedCharacterIds: state.selectedCharacterIds.filter((cid) => cid !== id),
+    })),
+  selectedCharacterIds: [],
+  toggleCharacterSelection: (id) =>
+    set((state) => ({
+      selectedCharacterIds: state.selectedCharacterIds.includes(id)
+        ? state.selectedCharacterIds.filter((cid) => cid !== id)
+        : [...state.selectedCharacterIds, id],
+    })),
+  clearCharacterSelection: () => set({ selectedCharacterIds: [] }),
 }))
 
 // Selectors
