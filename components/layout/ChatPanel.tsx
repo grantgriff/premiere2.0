@@ -17,6 +17,7 @@ import { generateId } from '@/lib/utils'
 import { QualityReport } from '@/lib/models/types'
 import { CharacterMention, extractCharacterMentions } from '@/components/ui/CharacterMention'
 import { CharacterManager } from '@/components/ui/CharacterManager'
+import { YouTubeSearchPanel, YouTubeVideo } from '@/components/ui/YouTubeSearchPanel'
 
 const MODELS: { id: VideoModel; name: string; speed: string }[] = [
   { id: 'luma', name: 'Luma AI', speed: '5-10s' },
@@ -32,6 +33,8 @@ const DURATIONS = [1, 3, 5, 10, 15, 30]
 export function ChatPanel() {
   const [input, setInput] = useState('')
   const [showCharacterManager, setShowCharacterManager] = useState(false)
+  const [showYouTubeSearch, setShowYouTubeSearch] = useState(false)
+  const [selectedYouTubeVideos, setSelectedYouTubeVideos] = useState<YouTubeVideo[]>([])
   const inputRef = useRef<HTMLTextAreaElement>(null) as React.RefObject<HTMLTextAreaElement>
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -107,13 +110,19 @@ export function ChatPanel() {
     })
 
     try {
-      // Start generation
+      // Start generation with YouTube references if any
       const response = await startGeneration({
         prompt,
         model: selectedModel,
         duration: selectedDuration,
         userId: user.id,
         conversationId: convId,
+        styleReferences: selectedYouTubeVideos.map(v => ({
+          type: 'youtube' as const,
+          url: v.url,
+          videoId: v.id,
+          title: v.title,
+        })),
       })
 
       if (!response.success || !response.videoId) {
@@ -284,6 +293,25 @@ export function ChatPanel() {
     }
   }
 
+  const handleYouTubeSelect = (video: YouTubeVideo) => {
+    setSelectedYouTubeVideos(prev => {
+      // Toggle selection
+      const exists = prev.some(v => v.id === video.id)
+      if (exists) {
+        return prev.filter(v => v.id !== video.id)
+      }
+      // Limit to 3 reference videos
+      if (prev.length >= 3) {
+        return [...prev.slice(1), video]
+      }
+      return [...prev, video]
+    })
+  }
+
+  const removeYouTubeVideo = (videoId: string) => {
+    setSelectedYouTubeVideos(prev => prev.filter(v => v.id !== videoId))
+  }
+
   return (
     <aside className="w-[360px] h-full flex flex-col panel border-l border-border">
       {/* Chat Messages */}
@@ -412,6 +440,44 @@ export function ChatPanel() {
         </div>
       )}
 
+      {/* Selected YouTube References */}
+      {selectedYouTubeVideos.length > 0 && (
+        <div className="px-4 py-2 border-t border-border">
+          <label className="text-xs text-foreground-secondary mb-2 block">
+            Style References ({selectedYouTubeVideos.length}/3)
+          </label>
+          <div className="space-y-2">
+            {selectedYouTubeVideos.map((video) => (
+              <div
+                key={video.id}
+                className="flex items-center gap-2 p-2 bg-background-secondary rounded-lg"
+              >
+                <img
+                  src={video.thumbnail}
+                  alt={video.title}
+                  className="w-16 h-9 object-cover rounded"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground truncate">
+                    {video.title}
+                  </p>
+                  <p className="text-xs text-foreground-secondary truncate">
+                    {video.channel}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeYouTubeVideo(video.id)}
+                  className="p-1 text-foreground-secondary hover:text-foreground"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Input Area */}
       <form onSubmit={handleSubmit} className="p-4 border-t border-border">
         <div className="relative">
@@ -443,7 +509,13 @@ export function ChatPanel() {
             <button type="button" className="btn-ghost p-1.5" title="Upload video" disabled={isGenerating}>
               <Video className="w-4 h-4" />
             </button>
-            <button type="button" className="btn-ghost p-1.5" title="Search YouTube" disabled={isGenerating}>
+            <button
+              type="button"
+              onClick={() => setShowYouTubeSearch(true)}
+              className={`btn-ghost p-1.5 ${selectedYouTubeVideos.length > 0 ? 'text-red-500' : ''}`}
+              title="Search YouTube for reference"
+              disabled={isGenerating}
+            >
               <Youtube className="w-4 h-4" />
             </button>
             <button
@@ -485,6 +557,14 @@ export function ChatPanel() {
         isOpen={showCharacterManager}
         onClose={() => setShowCharacterManager(false)}
         selectionMode={true}
+      />
+
+      {/* YouTube Search Panel */}
+      <YouTubeSearchPanel
+        isOpen={showYouTubeSearch}
+        onClose={() => setShowYouTubeSearch(false)}
+        onSelectVideo={handleYouTubeSelect}
+        selectedVideos={selectedYouTubeVideos}
       />
     </aside>
   )
