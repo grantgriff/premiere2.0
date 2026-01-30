@@ -11,6 +11,8 @@ import {
   Search,
   Wand2,
   ImageIcon,
+  Zap,
+  Video,
 } from 'lucide-react'
 import { useAppStore, Character } from '@/lib/store'
 import { CharacterCard } from './CharacterCard'
@@ -24,7 +26,7 @@ interface CharacterManagerProps {
 }
 
 type ViewMode = 'grid' | 'create' | 'edit'
-type CreateMode = 'upload' | 'generate'
+type CreateMode = 'upload' | 'generate' | 'ai-decide'
 
 export function CharacterManager({
   isOpen,
@@ -159,6 +161,32 @@ export function CharacterManager({
     }, 3000)
 
     setIsGenerating(false)
+    resetForm()
+  }
+
+  // Handle AI Decide - creates a placeholder that will auto-capture from video
+  const handleAiDecide = async () => {
+    if (!name.trim()) return
+
+    setIsUploading(true)
+
+    // Simulate setup
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    const newCharacter: Character = {
+      id: generateId(),
+      name: name.trim(),
+      description: description.trim() || `Auto-captured character - will be extracted from first video frame`,
+      referenceImageUrl: null, // Will be populated when video generates
+      thumbnailUrl: null, // Will be populated when video generates
+      embeddingStatus: 'pending', // Pending until video generates
+      createdAt: new Date(),
+      usageCount: 0,
+    }
+
+    addCharacter(newCharacter)
+
+    setIsUploading(false)
     resetForm()
   }
 
@@ -322,29 +350,49 @@ export function CharacterManager({
             <div className="space-y-6">
               {/* Mode selector - only show in create mode, not edit */}
               {viewMode === 'create' && (
-                <div className="flex rounded-lg bg-background-secondary p-1">
-                  <button
-                    onClick={() => setCreateMode('upload')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                      createMode === 'upload'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-foreground-secondary hover:text-foreground'
-                    }`}
-                  >
-                    <Upload className="w-4 h-4" />
-                    Upload Photo
-                  </button>
-                  <button
-                    onClick={() => setCreateMode('generate')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                      createMode === 'generate'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-foreground-secondary hover:text-foreground'
-                    }`}
-                  >
-                    <Wand2 className="w-4 h-4" />
-                    Generate with AI
-                  </button>
+                <div className="space-y-3">
+                  <div className="flex rounded-lg bg-background-secondary p-1">
+                    <button
+                      onClick={() => setCreateMode('upload')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                        createMode === 'upload'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-foreground-secondary hover:text-foreground'
+                      }`}
+                    >
+                      <Upload className="w-4 h-4" />
+                      Upload
+                    </button>
+                    <button
+                      onClick={() => setCreateMode('generate')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                        createMode === 'generate'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-foreground-secondary hover:text-foreground'
+                      }`}
+                    >
+                      <Wand2 className="w-4 h-4" />
+                      Generate
+                    </button>
+                    <button
+                      onClick={() => setCreateMode('ai-decide')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                        createMode === 'ai-decide'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-foreground-secondary hover:text-foreground'
+                      }`}
+                    >
+                      <Zap className="w-4 h-4" />
+                      Let AI Decide
+                    </button>
+                  </div>
+
+                  {/* Mode description */}
+                  <p className="text-xs text-foreground-secondary text-center">
+                    {createMode === 'upload' && 'Upload your own photo for the character'}
+                    {createMode === 'generate' && 'Describe the character and AI will generate them'}
+                    {createMode === 'ai-decide' && 'AI generates character during video creation and maintains consistency'}
+                  </p>
                 </div>
               )}
 
@@ -419,6 +467,46 @@ export function CharacterManager({
                 </div>
               )}
 
+              {/* Let AI Decide mode */}
+              {createMode === 'ai-decide' && viewMode === 'create' && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 p-4 rounded-lg bg-gradient-to-br from-accent/10 to-purple-500/10 border border-accent/20">
+                    <div className="w-12 h-12 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                      <Video className="w-6 h-6 text-accent" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Auto-Capture Mode</p>
+                      <p className="text-xs text-foreground-secondary mt-1">
+                        When your video generates, we'll automatically capture the first character
+                        that appears and save their face for consistency in future frames and videos.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 p-4 rounded-lg bg-background-secondary/50 border border-border">
+                    <h4 className="text-sm font-medium text-foreground">How it works:</h4>
+                    <ol className="space-y-2 text-sm text-foreground-secondary">
+                      <li className="flex items-start gap-2">
+                        <span className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                        <span>Generate your video with a character in the prompt</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                        <span>AI detects and extracts the character's face from frame 1</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                        <span>Character is saved with face embedding for future use</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
+                        <span>Reference @{name || 'name'} in future prompts for consistency</span>
+                      </li>
+                    </ol>
+                  </div>
+                </div>
+              )}
+
               {/* Name */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
@@ -447,30 +535,32 @@ export function CharacterManager({
                 />
               </div>
 
-              {/* Info */}
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-accent/5 border border-accent/20">
-                <Sparkles className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="text-foreground font-medium">
-                    {createMode === 'generate' && viewMode === 'create'
-                      ? 'AI Character Generation'
-                      : 'AI Face Embedding'}
-                  </p>
-                  <p className="text-foreground-secondary mt-1">
-                    {createMode === 'generate' && viewMode === 'create' ? (
-                      <>
-                        We'll generate a unique character based on your description, then extract
-                        facial features for consistency. Use @{name || 'name'} in your prompts.
-                      </>
-                    ) : (
-                      <>
-                        When you save this character, we'll extract facial features to maintain
-                        consistency across your video generations. Use @{name || 'name'} in your prompts.
-                      </>
-                    )}
-                  </p>
+              {/* Info - hide for ai-decide since it has its own explanation */}
+              {createMode !== 'ai-decide' && (
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-accent/5 border border-accent/20">
+                  <Sparkles className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="text-foreground font-medium">
+                      {createMode === 'generate' && viewMode === 'create'
+                        ? 'AI Character Generation'
+                        : 'AI Face Embedding'}
+                    </p>
+                    <p className="text-foreground-secondary mt-1">
+                      {createMode === 'generate' && viewMode === 'create' ? (
+                        <>
+                          We'll generate a unique character based on your description, then extract
+                          facial features for consistency. Use @{name || 'name'} in your prompts.
+                        </>
+                      ) : (
+                        <>
+                          When you save this character, we'll extract facial features to maintain
+                          consistency across your video generations. Use @{name || 'name'} in your prompts.
+                        </>
+                      )}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -522,6 +612,8 @@ export function CharacterManager({
                     ? handleEdit
                     : createMode === 'generate'
                     ? handleGenerate
+                    : createMode === 'ai-decide'
+                    ? handleAiDecide
                     : handleCreate
                 }
                 disabled={
@@ -545,6 +637,11 @@ export function CharacterManager({
                       <>
                         <Sparkles className="w-4 h-4" />
                         Generate Character
+                      </>
+                    ) : createMode === 'ai-decide' ? (
+                      <>
+                        <Zap className="w-4 h-4" />
+                        Enable Auto-Capture
                       </>
                     ) : (
                       'Create Character'

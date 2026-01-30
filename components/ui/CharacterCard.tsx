@@ -10,6 +10,8 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Zap,
+  Clock,
 } from 'lucide-react'
 import { Character } from '@/lib/store'
 
@@ -32,15 +34,23 @@ export function CharacterCard({
 }: CharacterCardProps) {
   const [showMenu, setShowMenu] = useState(false)
 
+  // Check if this is an auto-capture character (pending with no image)
+  const isAwaitingCapture =
+    character.embeddingStatus === 'pending' &&
+    !character.referenceImageUrl &&
+    !character.thumbnailUrl
+
   const statusIcon = {
-    pending: <Loader2 className="w-3 h-3 animate-spin text-yellow-400" />,
+    pending: isAwaitingCapture
+      ? <Zap className="w-3 h-3 text-purple-400" />
+      : <Clock className="w-3 h-3 text-yellow-400" />,
     processing: <Loader2 className="w-3 h-3 animate-spin text-blue-400" />,
     ready: <CheckCircle2 className="w-3 h-3 text-green-400" />,
     failed: <AlertCircle className="w-3 h-3 text-red-400" />,
   }
 
   const statusText = {
-    pending: 'Pending',
+    pending: isAwaitingCapture ? 'Awaiting capture' : 'Pending',
     processing: 'Processing...',
     ready: 'Ready',
     failed: 'Failed',
@@ -64,6 +74,10 @@ export function CharacterCard({
               alt={character.name}
               className="w-full h-full object-cover"
             />
+          ) : isAwaitingCapture ? (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-500/20 to-accent/20">
+              <Zap className="w-4 h-4 text-purple-400" />
+            </div>
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <User className="w-4 h-4 text-foreground-secondary" />
@@ -106,6 +120,12 @@ export function CharacterCard({
             alt={character.name}
             className="w-full h-full object-cover"
           />
+        ) : isAwaitingCapture ? (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500/10 to-accent/10">
+            <Zap className="w-10 h-10 text-purple-400 mb-2" />
+            <span className="text-xs text-foreground-secondary">Auto-capture</span>
+            <span className="text-[10px] text-foreground-secondary/60">Generate video to capture</span>
+          </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <User className="w-12 h-12 text-foreground-secondary/50" />
