@@ -1,18 +1,47 @@
-import { createClient } from '@supabase/supabase-js'
-import { createBrowserClient as createSupabaseBrowserClient } from '@supabase/ssr'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createBrowserClient as createSSRBrowserClient } from '@supabase/ssr'
 
-// Server-side Supabase client
+// Get the appropriate keys (supports both new and legacy formats)
+const getSupabaseUrl = () => process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+
+const getPublicKey = () =>
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+
+const getSecretKey = () =>
+  process.env.SUPABASE_SECRET_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
+// Server-side Supabase client (with secret/service role key for admin operations)
 export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  getSupabaseUrl(),
+  getSecretKey() || getPublicKey()
 )
 
-// Client-side Supabase client (for use in components)
+// Client-side Supabase client using SSR package (handles cookies properly)
+let browserClient: SupabaseClient | null = null
+
 export const createBrowserClient = () => {
-  return createSupabaseBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  if (typeof window === 'undefined') {
+    // Server-side: create a new client each time
+    return createClient(getSupabaseUrl(), getPublicKey())
+  }
+
+  // Client-side: use SSR browser client for proper cookie handling
+  if (!browserClient) {
+    browserClient = createSSRBrowserClient(getSupabaseUrl(), getPublicKey())
+  }
+  return browserClient
+}
+
+// Get server client with auth context (for API routes)
+export const createServerClient = () => {
+  return createClient(getSupabaseUrl(), getSecretKey() || getPublicKey(), {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
 }
 
 // Storage bucket names

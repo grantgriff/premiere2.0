@@ -11,8 +11,14 @@ import {
   Volume2,
   VolumeX,
   Loader2,
+  Shield,
+  Youtube,
+  Share2,
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
+import { QualityBadge } from '@/components/ui/QualityBadge'
+import { QualityReport } from '@/lib/models/types'
+import { YouTubeUploadPanel } from '@/components/ui/YouTubeUploadPanel'
 
 export function VideoPanel() {
   const currentVideo = useAppStore((state) => state.currentVideo)
@@ -24,13 +30,7 @@ export function VideoPanel() {
   const [isMuted, setIsMuted] = useState(false)
   const [progress, setProgress] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
-
-  // Quality badge color based on score
-  const getQualityBadgeClass = (score: number) => {
-    if (score >= 8) return 'quality-high'
-    if (score >= 5) return 'quality-medium'
-    return 'quality-low'
-  }
+  const [showYouTubeUpload, setShowYouTubeUpload] = useState(false)
 
   // Handle video time updates
   useEffect(() => {
@@ -147,15 +147,20 @@ export function VideoPanel() {
               />
 
               {/* Quality Badge */}
-              {currentVideo.qualityScore && (
-                <div
-                  className={`absolute top-4 right-4 quality-badge ${getQualityBadgeClass(
-                    currentVideo.qualityScore
-                  )}`}
-                >
-                  {currentVideo.qualityScore.toFixed(1)}/10
-                </div>
-              )}
+              <div className="absolute top-4 right-4">
+                {currentVideo.isVerifying ? (
+                  <div className="flex items-center gap-1.5 text-foreground-secondary text-sm bg-background/80 px-2.5 py-1 rounded-full">
+                    <Shield className="w-4 h-4 animate-pulse" />
+                    <span>Verifying...</span>
+                  </div>
+                ) : currentVideo.qualityScore !== null ? (
+                  <QualityBadge
+                    score={currentVideo.qualityScore}
+                    report={currentVideo.qualityReport as QualityReport | null}
+                    size="md"
+                  />
+                ) : null}
+              </div>
 
               {/* Play/Pause Overlay */}
               <button
@@ -241,6 +246,14 @@ export function VideoPanel() {
                   <Scissors className="w-4 h-4" />
                   Edit Segment
                 </button>
+                <div className="flex-1" />
+                <button
+                  onClick={() => setShowYouTubeUpload(true)}
+                  className="btn-primary flex items-center gap-2 bg-red-500 hover:bg-red-600"
+                >
+                  <Youtube className="w-4 h-4" />
+                  Upload to YouTube
+                </button>
               </div>
             </div>
           </div>
@@ -286,6 +299,13 @@ export function VideoPanel() {
           </div>
         )}
       </div>
+
+      {/* YouTube Upload Panel */}
+      <YouTubeUploadPanel
+        isOpen={showYouTubeUpload}
+        onClose={() => setShowYouTubeUpload(false)}
+        video={currentVideo}
+      />
     </main>
   )
 }
