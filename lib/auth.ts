@@ -14,7 +14,8 @@ export async function signInWithGoogle(redirectTo?: string) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: redirectTo || `${window.location.origin}/callback`,
+      // Use server-side route handler for PKCE code exchange
+      redirectTo: redirectTo || `${window.location.origin}/auth/callback`,
       queryParams: {
         access_type: 'offline',
         prompt: 'consent',
@@ -36,7 +37,8 @@ export async function signInWithGitHub(redirectTo?: string) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'github',
     options: {
-      redirectTo: redirectTo || `${window.location.origin}/callback`,
+      // Use server-side route handler for PKCE code exchange
+      redirectTo: redirectTo || `${window.location.origin}/auth/callback`,
     },
   })
 
