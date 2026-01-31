@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { generateVideo, MODEL_INFO, VideoModelId } from '@/lib/models'
-import { enqueueGeneration, checkRateLimit } from '@/lib/queue'
+import { generateVideo, checkGenerationStatus as checkModelStatus, MODEL_INFO, VideoModelId } from '@/lib/models'
+import { checkRateLimit } from '@/lib/queue'
 import { generateId, isValidDuration, parseCharacterMentions } from '@/lib/utils'
+
+// Store active generation jobs for status polling
+// Maps internal videoId to external model job info
+const activeJobs = new Map<string, {
+  model: VideoModelId
+  externalJobId: string
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  videoUrl?: string
+  thumbnailUrl?: string
+  error?: string
+  startedAt: number
+}>()
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { prompt, model, duration, conversationId, userId, styleReferenceUrls, characterIds } =
+    const { prompt, model, duration, conversationId, userId, styleReferenceUrls, styleReferences, characterIds } =
       body
 
     // Validate required fields
@@ -77,9 +89,10 @@ export async function POST(request: NextRequest) {
     const mentionedCharacters = parseCharacterMentions(prompt)
 
     // Create video record
-    const video = await prisma.video.create({
+    const videoId = generateId()
+    await prisma.video.create({
       data: {
-        id: generateId(),
+        id: videoId,
         conversationId: convId,
         userId,
         prompt,
@@ -90,22 +103,62 @@ export async function POST(request: NextRequest) {
         characterIds: characterIds || [],
         metadata: {
           mentionedCharacters,
+          styleReferences: styleReferences || [],
           requestedAt: new Date().toISOString(),
         },
       },
     })
 
-    // Add to generation queue
-    await enqueueGeneration({
-      id: generateId(),
-      videoId: video.id,
-      userId,
+    // Actually call the video generation API
+    console.log(`[Generate] Starting ${model} generation for video ${videoId}`)
+    const genResult = await generateVideo(model as VideoModelId, {
       prompt,
-      model,
       duration,
-      styleReferenceUrls,
-      characterIds,
-      createdAt: new Date().toISOString(),
+      aspectRatio: '16:9',
+      styleReferenceUrl: styleReferenceUrls?.[0], // Use first reference URL
+    })
+
+    if (!genResult.success || !genResult.jobId) {
+      // Model API failed - update status and return error but still return videoId
+      // so client can track the failure
+      await prisma.video.update({
+        where: { id: videoId },
+        data: { status: 'failed' },
+      })
+
+      activeJobs.set(videoId, {
+        model: model as VideoModelId,
+        externalJobId: '',
+        status: 'failed',
+        error: genResult.error || 'Model API failed to start generation',
+        startedAt: Date.now(),
+      })
+
+      console.log(`[Generate] Failed to start: ${genResult.error}`)
+
+      // Still return success so client can poll for status
+      return NextResponse.json({
+        success: true,
+        videoId,
+        conversationId: convId,
+        estimatedTime: modelInfo.estimatedTime,
+        creditsRemaining: (user as { credits: number }).credits - duration,
+        warning: genResult.error,
+      })
+    }
+
+    // Store the job mapping for status polling
+    activeJobs.set(videoId, {
+      model: model as VideoModelId,
+      externalJobId: genResult.jobId,
+      status: 'processing',
+      startedAt: Date.now(),
+    })
+
+    // Update video status
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { status: 'processing' },
     })
 
     // Deduct credits
@@ -124,9 +177,11 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    console.log(`[Generate] Job started: ${genResult.jobId} for video ${videoId}`)
+
     return NextResponse.json({
       success: true,
-      videoId: video.id,
+      videoId,
       conversationId: convId,
       estimatedTime: modelInfo.estimatedTime,
       creditsRemaining: (user as { credits: number }).credits - duration,
@@ -140,7 +195,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Get generation status
+// Get generation status - polls the actual model API
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const videoId = searchParams.get('videoId')
@@ -150,6 +205,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Get from mock database first
     const video = await prisma.video.findUnique({
       where: { id: videoId },
     })
@@ -158,7 +214,87 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Video not found' }, { status: 404 })
     }
 
-    return NextResponse.json(video)
+    // Check if we have an active job for this video
+    const activeJob = activeJobs.get(videoId)
+
+    if (activeJob) {
+      // If already completed or failed, return cached result
+      if (activeJob.status === 'completed' || activeJob.status === 'failed') {
+        return NextResponse.json({
+          id: videoId,
+          status: activeJob.status,
+          videoUrl: activeJob.videoUrl || null,
+          thumbnailUrl: activeJob.thumbnailUrl || null,
+          qualityScore: null,
+          model: activeJob.model,
+          duration: (video as { duration: number }).duration,
+          prompt: (video as { prompt: string }).prompt,
+          createdAt: new Date(activeJob.startedAt).toISOString(),
+          completedAt: activeJob.status === 'completed' ? new Date().toISOString() : null,
+          error: activeJob.error,
+        })
+      }
+
+      // Poll the model API for status
+      if (activeJob.externalJobId) {
+        const modelStatus = await checkModelStatus(activeJob.model, activeJob.externalJobId)
+
+        // Update cache and database
+        if (modelStatus.status === 'completed' && modelStatus.videoUrl) {
+          activeJob.status = 'completed'
+          activeJob.videoUrl = modelStatus.videoUrl
+          activeJob.thumbnailUrl = modelStatus.thumbnailUrl
+          activeJobs.set(videoId, activeJob)
+
+          await prisma.video.update({
+            where: { id: videoId },
+            data: {
+              status: 'completed',
+              videoUrl: modelStatus.videoUrl,
+              thumbnailUrl: modelStatus.thumbnailUrl,
+              completedAt: new Date(),
+            },
+          })
+        } else if (modelStatus.status === 'failed') {
+          activeJob.status = 'failed'
+          activeJob.error = modelStatus.error
+          activeJobs.set(videoId, activeJob)
+
+          await prisma.video.update({
+            where: { id: videoId },
+            data: { status: 'failed' },
+          })
+        }
+
+        return NextResponse.json({
+          id: videoId,
+          status: modelStatus.status,
+          videoUrl: modelStatus.videoUrl || null,
+          thumbnailUrl: modelStatus.thumbnailUrl || null,
+          qualityScore: null,
+          model: activeJob.model,
+          duration: (video as { duration: number }).duration,
+          prompt: (video as { prompt: string }).prompt,
+          createdAt: new Date(activeJob.startedAt).toISOString(),
+          completedAt: modelStatus.status === 'completed' ? new Date().toISOString() : null,
+          error: modelStatus.error,
+        })
+      }
+    }
+
+    // No active job - return database state
+    return NextResponse.json({
+      id: videoId,
+      status: (video as { status: string }).status,
+      videoUrl: (video as { videoUrl: string | null }).videoUrl,
+      thumbnailUrl: (video as { thumbnailUrl: string | null }).thumbnailUrl,
+      qualityScore: (video as { qualityScore: number | null }).qualityScore,
+      model: (video as { model: string }).model,
+      duration: (video as { duration: number }).duration,
+      prompt: (video as { prompt: string }).prompt,
+      createdAt: (video as { createdAt: Date }).createdAt.toISOString(),
+      completedAt: (video as { completedAt: Date | null }).completedAt?.toISOString() || null,
+    })
   } catch (error) {
     console.error('Status check error:', error)
     return NextResponse.json({ error: 'Failed to check status' }, { status: 500 })

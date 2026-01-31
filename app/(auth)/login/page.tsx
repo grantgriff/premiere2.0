@@ -1,12 +1,33 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { signInWithGoogle, signInWithGitHub } from '@/lib/auth'
+import { signInWithGoogle, signInWithGitHub, getSession } from '@/lib/auth'
 
-export default function LoginPage() {
+function LoginContent() {
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState<'google' | 'github' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [checking, setChecking] = useState(true)
+
+  // Check for error from OAuth redirect and existing session
+  useEffect(() => {
+    // Check for error in URL
+    const urlError = searchParams.get('error')
+    if (urlError) {
+      setError(decodeURIComponent(urlError))
+    }
+
+    // Check if already authenticated
+    getSession().then((session) => {
+      if (session) {
+        window.location.href = '/'
+      } else {
+        setChecking(false)
+      }
+    })
+  }, [searchParams])
 
   const handleGoogleLogin = async () => {
     setIsLoading('google')
@@ -28,6 +49,14 @@ export default function LoginPage() {
       setError('Failed to sign in with GitHub. Please try again.')
       setIsLoading(null)
     }
+  }
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-accent" />
+      </div>
+    )
   }
 
   return (
@@ -111,5 +140,17 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-accent" />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }

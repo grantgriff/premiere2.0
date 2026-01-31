@@ -8,30 +8,14 @@ export type AuthUser = {
   avatarUrl: string | null
 }
 
-// Clear any stale auth state before new login
-function clearStaleAuthState() {
-  if (typeof window === 'undefined') return
-
-  // Clear any stale PKCE verifiers from localStorage
-  const keysToRemove: string[] = []
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i)
-    if (key && (key.includes('code-verifier') || key.includes('pkce'))) {
-      keysToRemove.push(key)
-    }
-  }
-  keysToRemove.forEach(key => localStorage.removeItem(key))
-}
-
 // Sign in with Google OAuth
 export async function signInWithGoogle(redirectTo?: string) {
-  clearStaleAuthState()
-
   const supabase = createBrowserClient()
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: redirectTo || `${window.location.origin}/callback`,
+      // Use server-side route handler for PKCE code exchange
+      redirectTo: redirectTo || `${window.location.origin}/auth/callback`,
       queryParams: {
         access_type: 'offline',
         prompt: 'consent',
@@ -49,13 +33,12 @@ export async function signInWithGoogle(redirectTo?: string) {
 
 // Sign in with GitHub OAuth
 export async function signInWithGitHub(redirectTo?: string) {
-  clearStaleAuthState()
-
   const supabase = createBrowserClient()
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'github',
     options: {
-      redirectTo: redirectTo || `${window.location.origin}/callback`,
+      // Use server-side route handler for PKCE code exchange
+      redirectTo: redirectTo || `${window.location.origin}/auth/callback`,
     },
   })
 
