@@ -1,48 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { createCharacter, getCharacters, updateCharacter, deleteCharacter } from '@/lib/db-supabase'
 import { generateId } from '@/lib/utils'
 
 // Create a new character
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, description, referenceImageUrl } = body
+    const { userId, name, description, referenceImageUrl, thumbnailUrl } = body
 
-    if (!userId || !name || !description) {
+    if (!userId || !name) {
       return NextResponse.json(
-        { error: 'Missing required fields: userId, name, description' },
+        { error: 'Missing required fields: userId, name' },
         { status: 400 }
       )
     }
 
-    // Check character limit (20 max per user)
-    const characterCount = await prisma.character.count({
-      where: { userId },
+    // Create character in Supabase
+    const character = await createCharacter({
+      id: generateId(),
+      userId,
+      name,
+      description: description || '',
+      referenceImageUrl: referenceImageUrl || null,
+      thumbnailUrl: thumbnailUrl || null,
     })
 
-    if (characterCount >= 20) {
+    if (!character) {
       return NextResponse.json(
-        { error: 'Maximum character limit (20) reached' },
-        { status: 400 }
+        { error: 'Failed to create character' },
+        { status: 500 }
       )
     }
 
-    // Create character
-    const character = await prisma.character.create({
-      data: {
-        id: generateId(),
-        userId,
-        name,
-        description,
-        referenceImageUrl,
-        // embeddingData would be populated by AI feature extraction
-        embeddingData: null,
-      },
-    })
-
+    // Transform to frontend format
     return NextResponse.json({
       success: true,
-      character,
+      character: {
+        id: character.id,
+        name: character.name,
+        description: character.description,
+        referenceImageUrl: character.reference_image_url,
+        thumbnailUrl: character.thumbnail_url,
+        embeddingStatus: character.embedding_status,
+        createdAt: character.created_at,
+        usageCount: 0,
+      },
     })
   } catch (error) {
     console.error('Create character error:', error)
@@ -63,10 +65,19 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const characters = await prisma.character.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    })
+    const dbCharacters = await getCharacters(userId)
+
+    // Transform to frontend format
+    const characters = dbCharacters.map(c => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      referenceImageUrl: c.reference_image_url,
+      thumbnailUrl: c.thumbnail_url,
+      embeddingStatus: c.embedding_status,
+      createdAt: c.created_at,
+      usageCount: 0,
+    }))
 
     return NextResponse.json({ characters })
   } catch (error) {
@@ -82,7 +93,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, userId, name, description, referenceImageUrl } = body
+    const { id, userId, name, description, referenceImageUrl, thumbnailUrl, embeddingStatus } = body
 
     if (!id || !userId) {
       return NextResponse.json(
@@ -91,28 +102,30 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Verify ownership
-    const existing = await prisma.character.findUnique({
-      where: { id },
-      select: { userId: true },
+    const character = await updateCharacter(id, userId, {
+      name,
+      description,
+      referenceImageUrl,
+      thumbnailUrl,
+      embeddingStatus,
     })
 
-    if (!existing || existing.userId !== userId) {
+    if (!character) {
       return NextResponse.json({ error: 'Character not found' }, { status: 404 })
     }
 
-    const character = await prisma.character.update({
-      where: { id },
-      data: {
-        ...(name && { name }),
-        ...(description && { description }),
-        ...(referenceImageUrl !== undefined && { referenceImageUrl }),
-      },
-    })
-
     return NextResponse.json({
       success: true,
-      character,
+      character: {
+        id: character.id,
+        name: character.name,
+        description: character.description,
+        referenceImageUrl: character.reference_image_url,
+        thumbnailUrl: character.thumbnail_url,
+        embeddingStatus: character.embedding_status,
+        createdAt: character.created_at,
+        usageCount: 0,
+      },
     })
   } catch (error) {
     console.error('Update character error:', error)
@@ -137,19 +150,11 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    // Verify ownership
-    const existing = await prisma.character.findUnique({
-      where: { id },
-      select: { userId: true },
-    })
+    const success = await deleteCharacter(id, userId)
 
-    if (!existing || existing.userId !== userId) {
+    if (!success) {
       return NextResponse.json({ error: 'Character not found' }, { status: 404 })
     }
-
-    await prisma.character.delete({
-      where: { id },
-    })
 
     return NextResponse.json({ success: true })
   } catch (error) {
