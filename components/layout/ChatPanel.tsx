@@ -12,12 +12,20 @@ import {
   User,
 } from 'lucide-react'
 import { useAppStore, useActiveConversation, VideoModel } from '@/lib/store'
-import { startGeneration, pollVideoStatus, verifyVideoQuality, VideoStatusResponse } from '@/lib/api'
+import { startGeneration, pollVideoStatus, verifyVideoQuality, VideoStatusResponse, StyleReference } from '@/lib/api'
 import { generateId } from '@/lib/utils'
 import { QualityReport } from '@/lib/models/types'
 import { CharacterMention, extractCharacterMentions } from '@/components/ui/CharacterMention'
 import { CharacterManager } from '@/components/ui/CharacterManager'
 import { YouTubeSearchPanel, YouTubeVideo } from '@/components/ui/YouTubeSearchPanel'
+import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
+
+interface UploadedFile {
+  id: string
+  type: 'image' | 'video'
+  file: File
+  previewUrl: string
+}
 
 const MODELS: { id: VideoModel; name: string; speed: string }[] = [
   { id: 'luma', name: 'Luma AI', speed: '5-10s' },
@@ -35,8 +43,12 @@ export function ChatPanel() {
   const [showCharacterManager, setShowCharacterManager] = useState(false)
   const [showYouTubeSearch, setShowYouTubeSearch] = useState(false)
   const [selectedYouTubeVideos, setSelectedYouTubeVideos] = useState<YouTubeVideo[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+  const [isUploading, setIsUploading] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null) as React.RefObject<HTMLTextAreaElement>
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
 
   // Global state
   const user = useAppStore((state) => state.user)
@@ -110,19 +122,40 @@ export function ChatPanel() {
     })
 
     try {
-      // Start generation with YouTube references if any
+      // Upload files to storage first
+      const uploadedUrls: StyleReference[] = []
+      for (const uploadedFile of uploadedFiles) {
+        const bucket = uploadedFile.type === 'image' ? STORAGE_BUCKETS.IMAGES : STORAGE_BUCKETS.VIDEOS
+        const path = `${user.id}/${generateId()}_${uploadedFile.file.name}`
+        const url = await uploadToStorage(bucket, path, uploadedFile.file)
+        if (url) {
+          uploadedUrls.push({
+            type: 'upload',
+            url,
+            title: uploadedFile.file.name,
+          })
+        }
+      }
+
+      // Build all style references
+      const styleReferences: StyleReference[] = [
+        ...selectedYouTubeVideos.map(v => ({
+          type: 'youtube' as const,
+          url: v.url,
+          videoId: v.id,
+          title: v.title,
+        })),
+        ...uploadedUrls,
+      ]
+
+      // Start generation with all references
       const response = await startGeneration({
         prompt,
         model: selectedModel,
         duration: selectedDuration,
         userId: user.id,
         conversationId: convId,
-        styleReferences: selectedYouTubeVideos.map(v => ({
-          type: 'youtube' as const,
-          url: v.url,
-          videoId: v.id,
-          title: v.title,
-        })),
+        styleReferences,
       })
 
       if (!response.success || !response.videoId) {
@@ -275,6 +308,9 @@ export function ChatPanel() {
           })
         }
       })
+      // Clear uploaded files after successful submission
+      setUploadedFiles([])
+      setSelectedYouTubeVideos([])
     } catch (error) {
       setIsGenerating(false)
       addMessage(convId, {
@@ -310,6 +346,52 @@ export function ChatPanel() {
 
   const removeYouTubeVideo = (videoId: string) => {
     setSelectedYouTubeVideos(prev => prev.filter(v => v.id !== videoId))
+  }
+
+  // Handle file upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const file = files[0]
+    const maxSize = type === 'image' ? 10 * 1024 * 1024 : 100 * 1024 * 1024 // 10MB for images, 100MB for videos
+
+    if (file.size > maxSize) {
+      alert(`File too large. Max size: ${type === 'image' ? '10MB' : '100MB'}`)
+      return
+    }
+
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file)
+    const uploadedFile: UploadedFile = {
+      id: generateId(),
+      type,
+      file,
+      previewUrl,
+    }
+
+    // Limit to 3 total uploads
+    setUploadedFiles(prev => {
+      if (prev.length >= 3) {
+        // Clean up old preview URL
+        URL.revokeObjectURL(prev[0].previewUrl)
+        return [...prev.slice(1), uploadedFile]
+      }
+      return [...prev, uploadedFile]
+    })
+
+    // Reset the input
+    e.target.value = ''
+  }
+
+  const removeUploadedFile = (id: string) => {
+    setUploadedFiles(prev => {
+      const file = prev.find(f => f.id === id)
+      if (file) {
+        URL.revokeObjectURL(file.previewUrl)
+      }
+      return prev.filter(f => f.id !== id)
+    })
   }
 
   return (
@@ -444,7 +526,7 @@ export function ChatPanel() {
       {selectedYouTubeVideos.length > 0 && (
         <div className="px-4 py-2 border-t border-border">
           <label className="text-xs text-foreground-secondary mb-2 block">
-            Style References ({selectedYouTubeVideos.length}/3)
+            YouTube References ({selectedYouTubeVideos.length}/3)
           </label>
           <div className="space-y-2">
             {selectedYouTubeVideos.map((video) => (
@@ -478,6 +560,45 @@ export function ChatPanel() {
         </div>
       )}
 
+      {/* Uploaded Files */}
+      {uploadedFiles.length > 0 && (
+        <div className="px-4 py-2 border-t border-border">
+          <label className="text-xs text-foreground-secondary mb-2 block">
+            Uploaded References ({uploadedFiles.length}/3)
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {uploadedFiles.map((file) => (
+              <div
+                key={file.id}
+                className="relative group"
+              >
+                {file.type === 'image' ? (
+                  <img
+                    src={file.previewUrl}
+                    alt={file.file.name}
+                    className="w-16 h-16 object-cover rounded-lg border border-border"
+                  />
+                ) : (
+                  <div className="w-16 h-16 bg-background-secondary rounded-lg border border-border flex items-center justify-center">
+                    <Video className="w-6 h-6 text-foreground-secondary" />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeUploadedFile(file.id)}
+                  className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3 h-3 text-white" />
+                </button>
+                <p className="text-xs text-foreground-secondary truncate w-16 mt-1">
+                  {file.file.name}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Input Area */}
       <form onSubmit={handleSubmit} className="p-4 border-t border-border">
         <div className="relative">
@@ -502,11 +623,38 @@ export function ChatPanel() {
               }
             }}
           />
+          {/* Hidden file inputs */}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handleFileUpload(e, 'image')}
+          />
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={(e) => handleFileUpload(e, 'video')}
+          />
           <div className="absolute bottom-2 right-2 flex items-center gap-1">
-            <button type="button" className="btn-ghost p-1.5" title="Upload image" disabled={isGenerating}>
+            <button
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              className={`btn-ghost p-1.5 ${uploadedFiles.some(f => f.type === 'image') ? 'text-accent' : ''}`}
+              title="Upload image reference"
+              disabled={isGenerating || uploadedFiles.length >= 3}
+            >
               <ImageIcon className="w-4 h-4" />
             </button>
-            <button type="button" className="btn-ghost p-1.5" title="Upload video" disabled={isGenerating}>
+            <button
+              type="button"
+              onClick={() => videoInputRef.current?.click()}
+              className={`btn-ghost p-1.5 ${uploadedFiles.some(f => f.type === 'video') ? 'text-accent' : ''}`}
+              title="Upload video reference"
+              disabled={isGenerating || uploadedFiles.length >= 3}
+            >
               <Video className="w-4 h-4" />
             </button>
             <button
