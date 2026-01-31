@@ -37,8 +37,6 @@ export const createBrowserClient = (): SupabaseClient => {
     browserClient = createClient(getSupabaseUrl(), getPublicKey(), {
       auth: {
         persistSession: true,
-        storageKey: 'premiere2-auth',
-        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
         flowType: 'pkce',
         detectSessionInUrl: true,
         autoRefreshToken: true,

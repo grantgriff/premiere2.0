@@ -1,12 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
-import { signInWithGoogle, signInWithGitHub } from '@/lib/auth'
+import { signInWithGoogle, signInWithGitHub, getSession } from '@/lib/auth'
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState<'google' | 'github' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [checking, setChecking] = useState(true)
+
+  // Check if already authenticated
+  useEffect(() => {
+    getSession().then((session) => {
+      if (session) {
+        window.location.href = '/'
+      } else {
+        setChecking(false)
+      }
+    })
+  }, [])
 
   const handleGoogleLogin = async () => {
     setIsLoading('google')
@@ -28,6 +40,14 @@ export default function LoginPage() {
       setError('Failed to sign in with GitHub. Please try again.')
       setIsLoading(null)
     }
+  }
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-accent" />
+      </div>
+    )
   }
 
   return (
