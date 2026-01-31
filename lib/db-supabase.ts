@@ -1,7 +1,7 @@
 // Supabase Database Integration
-// Replaces the in-memory mock with actual Supabase persistence
+// Uses user's auth session from cookies for RLS-protected operations
 
-import { createServerClient } from './supabase'
+import { createServerClient } from './supabase-server'
 
 // Types matching our schema
 export interface DbUser {
@@ -59,7 +59,7 @@ export async function createCharacter(data: {
   referenceImageUrl?: string | null
   thumbnailUrl?: string | null
 }): Promise<DbCharacter | null> {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
 
   const { data: character, error } = await supabase
     .from('characters')
@@ -84,7 +84,7 @@ export async function createCharacter(data: {
 }
 
 export async function getCharacters(userId: string): Promise<DbCharacter[]> {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
 
   const { data: characters, error } = await supabase
     .from('characters')
@@ -111,7 +111,7 @@ export async function updateCharacter(
     embeddingStatus: 'pending' | 'processing' | 'ready' | 'failed'
   }>
 ): Promise<DbCharacter | null> {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
 
   const updateData: Record<string, unknown> = {}
   if (data.name !== undefined) updateData.name = data.name
@@ -138,7 +138,7 @@ export async function updateCharacter(
 }
 
 export async function deleteCharacter(id: string, userId: string): Promise<boolean> {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
 
   const { error } = await supabase
     .from('characters')
@@ -154,14 +154,14 @@ export async function deleteCharacter(id: string, userId: string): Promise<boole
   return true
 }
 
-// User operations  
+// User operations
 export async function getOrCreateUser(authUser: {
   id: string
   email: string
   name: string
   avatarUrl: string | null
 }): Promise<DbUser | null> {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
 
   // Try to get existing user
   const { data: existingUser } = await supabase
@@ -196,7 +196,7 @@ export async function getOrCreateUser(authUser: {
 }
 
 export async function getUserCredits(userId: string): Promise<number> {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
 
   const { data: user } = await supabase
     .from('users')
@@ -211,7 +211,7 @@ export async function updateUserCredits(
   userId: string,
   creditChange: number
 ): Promise<number | null> {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
 
   const { data: user } = await supabase
     .from('users')

@@ -2,20 +2,16 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { createBrowserClient as createSSRBrowserClient } from '@supabase/ssr'
 
 // Get the appropriate keys (supports both new and legacy formats)
-const getSupabaseUrl = () => process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+export const getSupabaseUrl = () => process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 
-const getPublicKey = () =>
+export const getPublicKey = () =>
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-const getSecretKey = () =>
-  process.env.SUPABASE_SECRET_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
-// Server-side Supabase client (with secret/service role key for admin operations)
+// Server-side Supabase client (basic, no auth context - for client uploads etc)
 export const supabase = createClient(
   getSupabaseUrl(),
-  getSecretKey() || getPublicKey()
+  getPublicKey()
 )
 
 // Singleton browser client - stored globally to prevent multiple instances
@@ -47,16 +43,6 @@ export const createBrowserClient = (): SupabaseClient => {
 // Get the singleton client (alias for consistency)
 export const getBrowserClient = createBrowserClient
 
-// Get server client with auth context (for API routes)
-export const createServerClient = () => {
-  return createClient(getSupabaseUrl(), getSecretKey() || getPublicKey(), {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-}
-
 // Storage bucket names
 export const STORAGE_BUCKETS = {
   VIDEOS: 'videos',
@@ -64,13 +50,16 @@ export const STORAGE_BUCKETS = {
   THUMBNAILS: 'thumbnails',
 } as const
 
-// Upload file to Supabase storage
+// Upload file to Supabase storage (uses browser client on client-side)
 export async function uploadToStorage(
   bucket: string,
   path: string,
   file: File | Blob
 ): Promise<string | null> {
-  const { data, error } = await supabase.storage.from(bucket).upload(path, file, {
+  // Use browser client for uploads (has user auth context)
+  const client = typeof window !== 'undefined' ? createBrowserClient() : supabase
+
+  const { data, error } = await client.storage.from(bucket).upload(path, file, {
     cacheControl: '3600',
     upsert: false,
   })
@@ -80,13 +69,15 @@ export async function uploadToStorage(
     return null
   }
 
-  const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(data.path)
+  const { data: urlData } = client.storage.from(bucket).getPublicUrl(data.path)
   return urlData.publicUrl
 }
 
 // Delete file from Supabase storage
 export async function deleteFromStorage(bucket: string, path: string): Promise<boolean> {
-  const { error } = await supabase.storage.from(bucket).remove([path])
+  const client = typeof window !== 'undefined' ? createBrowserClient() : supabase
+
+  const { error } = await client.storage.from(bucket).remove([path])
 
   if (error) {
     console.error('Storage delete error:', error)
