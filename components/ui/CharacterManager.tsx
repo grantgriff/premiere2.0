@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   X,
   Plus,
@@ -17,6 +17,7 @@ import {
 import { useAppStore, Character } from '@/lib/store'
 import { CharacterCard } from './CharacterCard'
 import { generateId } from '@/lib/utils'
+import { useAuth } from '@/components/AuthProvider'
 
 interface CharacterManagerProps {
   isOpen: boolean
@@ -53,14 +54,101 @@ export function CharacterManager({
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Auth
+  const { user } = useAuth()
+
   // Store
   const characters = useAppStore((state) => state.characters)
   const addCharacter = useAppStore((state) => state.addCharacter)
-  const updateCharacter = useAppStore((state) => state.updateCharacter)
-  const deleteCharacter = useAppStore((state) => state.deleteCharacter)
+  const setCharacters = useAppStore((state) => state.setCharacters)
+  const updateCharacterInStore = useAppStore((state) => state.updateCharacter)
+  const deleteCharacterFromStore = useAppStore((state) => state.deleteCharacter)
   const selectedCharacterIds = useAppStore((state) => state.selectedCharacterIds)
   const toggleCharacterSelection = useAppStore((state) => state.toggleCharacterSelection)
   const clearCharacterSelection = useAppStore((state) => state.clearCharacterSelection)
+
+  // Load characters from API on mount
+  useEffect(() => {
+    if (user?.id && isOpen) {
+      loadCharactersFromAPI()
+    }
+  }, [user?.id, isOpen])
+
+  const loadCharactersFromAPI = async () => {
+    if (!user?.id) return
+
+    try {
+      const response = await fetch(`/api/characters?userId=${user.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.characters) {
+          setCharacters(data.characters.map((c: Record<string, unknown>) => ({
+            ...c,
+            createdAt: new Date(c.createdAt as string),
+          })))
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load characters:', error)
+    }
+  }
+
+  // API helper functions
+  const createCharacterAPI = async (character: Character) => {
+    if (!user?.id) return false
+
+    try {
+      const response = await fetch('/api/characters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          name: character.name,
+          description: character.description,
+          referenceImageUrl: character.referenceImageUrl,
+          thumbnailUrl: character.thumbnailUrl,
+        }),
+      })
+      return response.ok
+    } catch (error) {
+      console.error('Failed to create character:', error)
+      return false
+    }
+  }
+
+  const updateCharacterAPI = async (id: string, updates: Partial<Character>) => {
+    if (!user?.id) return false
+
+    try {
+      const response = await fetch('/api/characters', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          userId: user.id,
+          ...updates,
+        }),
+      })
+      return response.ok
+    } catch (error) {
+      console.error('Failed to update character:', error)
+      return false
+    }
+  }
+
+  const deleteCharacterAPI = async (id: string) => {
+    if (!user?.id) return false
+
+    try {
+      const response = await fetch(`/api/characters?id=${id}&userId=${user.id}`, {
+        method: 'DELETE',
+      })
+      return response.ok
+    } catch (error) {
+      console.error('Failed to delete character:', error)
+      return false
+    }
+  }
 
   // Filter characters
   const filteredCharacters = characters.filter((c) =>
@@ -100,30 +188,34 @@ export function CharacterManager({
 
   // Handle create
   const handleCreate = async () => {
-    if (!name.trim()) return
+    if (!name.trim() || !user?.id) return
 
     setIsUploading(true)
-
-    // Simulate upload and embedding extraction
-    await new Promise((resolve) => setTimeout(resolve, 1000))
 
     const newCharacter: Character = {
       id: generateId(),
       name: name.trim(),
       description: description.trim(),
-      referenceImageUrl: imagePreview, // In real app, would upload to storage
+      referenceImageUrl: imagePreview,
       thumbnailUrl: imagePreview,
       embeddingStatus: 'processing',
       createdAt: new Date(),
       usageCount: 0,
     }
 
-    addCharacter(newCharacter)
+    // Save to API first
+    const success = await createCharacterAPI(newCharacter)
 
-    // Simulate embedding processing
-    setTimeout(() => {
-      updateCharacter(newCharacter.id, { embeddingStatus: 'ready' })
-    }, 3000)
+    if (success) {
+      // Add to local store
+      addCharacter(newCharacter)
+
+      // Simulate embedding processing
+      setTimeout(() => {
+        updateCharacterInStore(newCharacter.id, { embeddingStatus: 'ready' })
+        updateCharacterAPI(newCharacter.id, { embeddingStatus: 'ready' })
+      }, 3000)
+    }
 
     setIsUploading(false)
     resetForm()
@@ -131,7 +223,7 @@ export function CharacterManager({
 
   // Handle AI generate character
   const handleGenerate = async () => {
-    if (!name.trim() || !generatePrompt.trim()) return
+    if (!name.trim() || !generatePrompt.trim() || !user?.id) return
 
     setIsGenerating(true)
 
@@ -139,7 +231,6 @@ export function CharacterManager({
     await new Promise((resolve) => setTimeout(resolve, 2500))
 
     // For demo, use a placeholder generated image
-    // In production, this would call an AI image generation API
     const placeholderImage = `https://api.dicebear.com/7.x/personas/svg?seed=${encodeURIComponent(name + generatePrompt)}&backgroundColor=b6e3f4,c0aede,d1d4f9`
 
     const newCharacter: Character = {
@@ -153,12 +244,18 @@ export function CharacterManager({
       usageCount: 0,
     }
 
-    addCharacter(newCharacter)
+    // Save to API
+    const success = await createCharacterAPI(newCharacter)
 
-    // Simulate embedding processing
-    setTimeout(() => {
-      updateCharacter(newCharacter.id, { embeddingStatus: 'ready' })
-    }, 3000)
+    if (success) {
+      addCharacter(newCharacter)
+
+      // Simulate embedding processing
+      setTimeout(() => {
+        updateCharacterInStore(newCharacter.id, { embeddingStatus: 'ready' })
+        updateCharacterAPI(newCharacter.id, { embeddingStatus: 'ready' })
+      }, 3000)
+    }
 
     setIsGenerating(false)
     resetForm()
@@ -166,25 +263,27 @@ export function CharacterManager({
 
   // Handle AI Decide - creates a placeholder that will auto-capture from video
   const handleAiDecide = async () => {
-    if (!name.trim()) return
+    if (!name.trim() || !user?.id) return
 
     setIsUploading(true)
-
-    // Simulate setup
-    await new Promise((resolve) => setTimeout(resolve, 500))
 
     const newCharacter: Character = {
       id: generateId(),
       name: name.trim(),
       description: description.trim() || `Auto-captured character - will be extracted from first video frame`,
-      referenceImageUrl: null, // Will be populated when video generates
-      thumbnailUrl: null, // Will be populated when video generates
-      embeddingStatus: 'pending', // Pending until video generates
+      referenceImageUrl: null,
+      thumbnailUrl: null,
+      embeddingStatus: 'pending',
       createdAt: new Date(),
       usageCount: 0,
     }
 
-    addCharacter(newCharacter)
+    // Save to API
+    const success = await createCharacterAPI(newCharacter)
+
+    if (success) {
+      addCharacter(newCharacter)
+    }
 
     setIsUploading(false)
     resetForm()
@@ -192,13 +291,11 @@ export function CharacterManager({
 
   // Handle edit
   const handleEdit = async () => {
-    if (!editingCharacter || !name.trim()) return
+    if (!editingCharacter || !name.trim() || !user?.id) return
 
     setIsUploading(true)
 
-    await new Promise((resolve) => setTimeout(resolve, 500))
-
-    updateCharacter(editingCharacter.id, {
+    const updates: Partial<Character> = {
       name: name.trim(),
       description: description.trim(),
       ...(imagePreview && imagePreview !== editingCharacter.referenceImageUrl
@@ -208,17 +305,33 @@ export function CharacterManager({
             embeddingStatus: 'processing' as const,
           }
         : {}),
-    })
+    }
 
-    // If image changed, simulate re-processing
-    if (imagePreview && imagePreview !== editingCharacter.referenceImageUrl) {
-      setTimeout(() => {
-        updateCharacter(editingCharacter.id, { embeddingStatus: 'ready' })
-      }, 3000)
+    // Save to API
+    const success = await updateCharacterAPI(editingCharacter.id, updates)
+
+    if (success) {
+      updateCharacterInStore(editingCharacter.id, updates)
+
+      // If image changed, simulate re-processing
+      if (imagePreview && imagePreview !== editingCharacter.referenceImageUrl) {
+        setTimeout(() => {
+          updateCharacterInStore(editingCharacter.id, { embeddingStatus: 'ready' })
+          updateCharacterAPI(editingCharacter.id, { embeddingStatus: 'ready' })
+        }, 3000)
+      }
     }
 
     setIsUploading(false)
     resetForm()
+  }
+
+  // Handle delete with API
+  const handleDelete = async (id: string) => {
+    const success = await deleteCharacterAPI(id)
+    if (success) {
+      deleteCharacterFromStore(id)
+    }
   }
 
   // Start editing
@@ -339,7 +452,7 @@ export function CharacterManager({
                       isSelected={selectedCharacterIds.includes(character.id)}
                       onSelect={() => toggleCharacterSelection(character.id)}
                       onEdit={() => startEdit(character)}
-                      onDelete={() => deleteCharacter(character.id)}
+                      onDelete={() => handleDelete(character.id)}
                     />
                   ))}
                 </div>

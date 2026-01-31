@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createBrowserClient as createSSRBrowserClient } from '@supabase/ssr'
 
 // Get the appropriate keys (supports both new and legacy formats)
 const getSupabaseUrl = () => process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -20,7 +21,8 @@ export const supabase = createClient(
 // Singleton browser client - stored globally to prevent multiple instances
 let browserClient: SupabaseClient | null = null
 
-// Create or return the singleton browser client
+// Create or return the singleton browser client using @supabase/ssr
+// This handles PKCE code verifier storage in cookies automatically
 export const createBrowserClient = (): SupabaseClient => {
   if (typeof window === 'undefined') {
     // Server-side: create a basic client (no persistence needed)
@@ -32,16 +34,12 @@ export const createBrowserClient = (): SupabaseClient => {
     })
   }
 
-  // Client-side: ensure only ONE instance exists
+  // Client-side: use @supabase/ssr for proper cookie-based PKCE storage
   if (!browserClient) {
-    browserClient = createClient(getSupabaseUrl(), getPublicKey(), {
-      auth: {
-        persistSession: true,
-        flowType: 'pkce',
-        detectSessionInUrl: true,
-        autoRefreshToken: true,
-      }
-    })
+    browserClient = createSSRBrowserClient(
+      getSupabaseUrl(),
+      getPublicKey()
+    )
   }
   return browserClient
 }
