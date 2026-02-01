@@ -130,8 +130,8 @@ export async function checkLumaStatus(jobId: string): Promise<GenerationStatus> 
       case 'completed':
         return {
           status: 'completed',
-          videoUrl: data.assets?.video || null,
-          thumbnailUrl: null, // Luma doesn't return separate thumbnail
+          videoUrl: data.assets?.video || undefined,
+          thumbnailUrl: undefined, // Luma doesn't return separate thumbnail
         }
       case 'failed':
         return { status: 'failed', error: data.failure_reason || 'Generation failed' }
