@@ -97,6 +97,7 @@ interface AppState {
   // Conversations
   conversations: Conversation[]
   activeConversationId: string | null
+  setConversations: (conversations: Conversation[]) => void
   setActiveConversation: (id: string | null) => void
   addConversation: (conversation: Conversation) => void
   updateConversation: (id: string, updates: Partial<Conversation>) => void
@@ -156,6 +157,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Conversations
   conversations: [],
   activeConversationId: null,
+  setConversations: (conversations) => set({ conversations }),
   setActiveConversation: (id) => set({ activeConversationId: id }),
   addConversation: (conversation) =>
     set((state) => ({

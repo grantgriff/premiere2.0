@@ -235,3 +235,301 @@ export async function updateUserCredits(
 
   return newCredits
 }
+
+// Message type for database
+export interface DbMessage {
+  id: string
+  conversation_id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  video_id: string | null
+  created_at: string
+}
+
+// Conversation operations
+export async function createConversation(data: {
+  id: string
+  userId: string
+  title: string
+}): Promise<DbConversation | null> {
+  const supabase = await createServerClient()
+
+  const { data: conversation, error } = await supabase
+    .from('conversations')
+    .insert({
+      id: data.id,
+      user_id: data.userId,
+      title: data.title,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error creating conversation:', error)
+    return null
+  }
+
+  return conversation
+}
+
+export async function getConversations(userId: string): Promise<DbConversation[]> {
+  const supabase = await createServerClient()
+
+  const { data: conversations, error } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching conversations:', error)
+    return []
+  }
+
+  return conversations || []
+}
+
+export async function getConversationWithDetails(
+  conversationId: string,
+  userId: string
+): Promise<{ conversation: DbConversation; messages: DbMessage[]; videos: DbVideo[] } | null> {
+  const supabase = await createServerClient()
+
+  // Get conversation
+  const { data: conversation, error: convError } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('id', conversationId)
+    .eq('user_id', userId)
+    .single()
+
+  if (convError || !conversation) {
+    console.error('Error fetching conversation:', convError)
+    return null
+  }
+
+  // Get messages
+  const { data: messages, error: msgError } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+
+  if (msgError) {
+    console.error('Error fetching messages:', msgError)
+  }
+
+  // Get videos
+  const { data: videos, error: vidError } = await supabase
+    .from('videos')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: false })
+
+  if (vidError) {
+    console.error('Error fetching videos:', vidError)
+  }
+
+  return {
+    conversation,
+    messages: messages || [],
+    videos: videos || [],
+  }
+}
+
+export async function updateConversation(
+  id: string,
+  userId: string,
+  data: Partial<{ title: string }>
+): Promise<DbConversation | null> {
+  const supabase = await createServerClient()
+
+  const updateData: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  }
+  if (data.title !== undefined) updateData.title = data.title
+
+  const { data: conversation, error } = await supabase
+    .from('conversations')
+    .update(updateData)
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating conversation:', error)
+    return null
+  }
+
+  return conversation
+}
+
+export async function deleteConversation(id: string, userId: string): Promise<boolean> {
+  const supabase = await createServerClient()
+
+  // Delete messages first (cascade)
+  await supabase
+    .from('messages')
+    .delete()
+    .eq('conversation_id', id)
+
+  // Delete videos
+  await supabase
+    .from('videos')
+    .delete()
+    .eq('conversation_id', id)
+
+  // Delete conversation
+  const { error } = await supabase
+    .from('conversations')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId)
+
+  if (error) {
+    console.error('Error deleting conversation:', error)
+    return false
+  }
+
+  return true
+}
+
+// Message operations
+export async function createMessage(data: {
+  id: string
+  conversationId: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  videoId?: string | null
+}): Promise<DbMessage | null> {
+  const supabase = await createServerClient()
+
+  const { data: message, error } = await supabase
+    .from('messages')
+    .insert({
+      id: data.id,
+      conversation_id: data.conversationId,
+      role: data.role,
+      content: data.content,
+      video_id: data.videoId || null,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error creating message:', error)
+    return null
+  }
+
+  // Update conversation's updated_at
+  await supabase
+    .from('conversations')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', data.conversationId)
+
+  return message
+}
+
+export async function getMessages(conversationId: string): Promise<DbMessage[]> {
+  const supabase = await createServerClient()
+
+  const { data: messages, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('Error fetching messages:', error)
+    return []
+  }
+
+  return messages || []
+}
+
+// Video operations (extend existing)
+export async function createVideo(data: {
+  id: string
+  userId: string
+  conversationId: string | null
+  prompt: string
+  model: string
+  duration: number
+  status?: 'pending' | 'processing' | 'completed' | 'failed'
+}): Promise<DbVideo | null> {
+  const supabase = await createServerClient()
+
+  const { data: video, error } = await supabase
+    .from('videos')
+    .insert({
+      id: data.id,
+      user_id: data.userId,
+      conversation_id: data.conversationId,
+      prompt: data.prompt,
+      model: data.model,
+      duration: data.duration,
+      status: data.status || 'pending',
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error creating video:', error)
+    return null
+  }
+
+  return video
+}
+
+export async function updateVideo(
+  id: string,
+  data: Partial<{
+    status: 'pending' | 'processing' | 'completed' | 'failed'
+    videoUrl: string | null
+    thumbnailUrl: string | null
+    qualityScore: number | null
+    qualityReport: Record<string, unknown> | null
+  }>
+): Promise<DbVideo | null> {
+  const supabase = await createServerClient()
+
+  const updateData: Record<string, unknown> = {}
+  if (data.status !== undefined) updateData.status = data.status
+  if (data.videoUrl !== undefined) updateData.video_url = data.videoUrl
+  if (data.thumbnailUrl !== undefined) updateData.thumbnail_url = data.thumbnailUrl
+  if (data.qualityScore !== undefined) updateData.quality_score = data.qualityScore
+  if (data.qualityReport !== undefined) updateData.quality_report = data.qualityReport
+  if (data.status === 'completed') updateData.completed_at = new Date().toISOString()
+
+  const { data: video, error } = await supabase
+    .from('videos')
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating video:', error)
+    return null
+  }
+
+  return video
+}
+
+export async function getVideos(userId: string): Promise<DbVideo[]> {
+  const supabase = await createServerClient()
+
+  const { data: videos, error } = await supabase
+    .from('videos')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching videos:', error)
+    return []
+  }
+
+  return videos || []
+}
