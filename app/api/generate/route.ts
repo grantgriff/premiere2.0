@@ -61,28 +61,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check user credits - create user with default credits if doesn't exist
-    let user = await prisma.user.findUnique({
+    // Ensure user record exists (needed for database relationships)
+    const user = await prisma.user.findUnique({
       where: { id: userId },
     })
 
     if (!user) {
-      // Auto-create user record with default credits
-      user = await prisma.user.create({
+      // Auto-create user record
+      await prisma.user.create({
         data: {
           id: userId,
           email: `user-${userId.slice(0, 8)}@premiere.app`, // Placeholder email
-          credits: 100,
+          credits: 0, // Credits not used - unlimited generations
         },
       })
-      console.log(`[Generate] Created new user record for ${userId} with 100 credits`)
-    }
-
-    if ((user as { credits: number }).credits < duration) {
-      return NextResponse.json(
-        { error: 'Insufficient credits for this generation' },
-        { status: 402 }
-      )
+      console.log(`[Generate] Created new user record for ${userId}`)
     }
 
     // Get or create conversation
@@ -169,7 +162,6 @@ export async function POST(request: NextRequest) {
         videoId,
         conversationId: convId,
         estimatedTime: modelInfo.estimatedTime,
-        creditsRemaining: (user as { credits: number }).credits - duration,
         warning: genResult.error,
       })
     }
@@ -186,12 +178,6 @@ export async function POST(request: NextRequest) {
     await prisma.video.update({
       where: { id: videoId },
       data: { status: 'processing' },
-    })
-
-    // Deduct credits
-    await prisma.user.update({
-      where: { id: userId },
-      data: { credits: { decrement: duration } },
     })
 
     // Create user message in conversation
@@ -211,7 +197,6 @@ export async function POST(request: NextRequest) {
       videoId,
       conversationId: convId,
       estimatedTime: modelInfo.estimatedTime,
-      creditsRemaining: (user as { credits: number }).credits - duration,
     })
   } catch (error) {
     console.error('Generation error:', error)
