@@ -61,12 +61,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check user credits
-    const user = await prisma.user.findUnique({
+    // Check user credits - create user with default credits if doesn't exist
+    let user = await prisma.user.findUnique({
       where: { id: userId },
     })
 
-    if (!user || (user as { credits: number }).credits < duration) {
+    if (!user) {
+      // Auto-create user record with default credits
+      user = await prisma.user.create({
+        data: {
+          id: userId,
+          email: `user-${userId.slice(0, 8)}@premiere.app`, // Placeholder email
+          credits: 100,
+        },
+      })
+      console.log(`[Generate] Created new user record for ${userId} with 100 credits`)
+    }
+
+    if ((user as { credits: number }).credits < duration) {
       return NextResponse.json(
         { error: 'Insufficient credits for this generation' },
         { status: 402 }
