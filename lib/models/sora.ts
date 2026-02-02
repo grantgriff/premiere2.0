@@ -53,11 +53,34 @@ export async function generateWithSora(params: GenerationParams): Promise<Genera
     formData.append('seconds', seconds.toString())
     formData.append('size', size)
 
+    // Add image reference (from style reference or character image)
+    const imageUrl = params.styleReferenceUrl || params.characterReferenceUrls?.[0]
+    if (imageUrl) {
+      try {
+        console.log(`[Sora] Fetching reference image: ${imageUrl.substring(0, 60)}...`)
+        const imageResponse = await fetch(imageUrl)
+        if (imageResponse.ok) {
+          const imageBlob = await imageResponse.blob()
+          // Determine file extension from URL or content-type
+          const contentType = imageResponse.headers.get('content-type') || 'image/jpeg'
+          const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpeg'
+          formData.append('input_reference', imageBlob, `reference.${ext}`)
+          console.log(`[Sora] Added reference image (${imageBlob.size} bytes, ${contentType})`)
+        } else {
+          console.warn(`[Sora] Failed to fetch reference image: ${imageResponse.status}`)
+        }
+      } catch (imgError) {
+        console.warn('[Sora] Error fetching reference image:', imgError)
+        // Continue without the image - don't fail the request
+      }
+    }
+
     console.log('[Sora] Request:', {
       model: SORA_MODEL,
       prompt: params.prompt,
       seconds,
       size,
+      hasInputReference: !!imageUrl,
     })
 
     const response = await fetch(`${OPENAI_API_BASE}/videos`, {

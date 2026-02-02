@@ -54,13 +54,17 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
       loop: false,
     }
 
-    // Add keyframes for image-to-video
-    if (params.styleReferenceUrl) {
+    // Add keyframes for image-to-video (style reference or character image)
+    const imageUrl = params.styleReferenceUrl || params.characterReferenceUrls?.[0]
+    if (imageUrl) {
       body.keyframes = {
         frame0: {
           type: 'image',
-          url: params.styleReferenceUrl,
+          url: imageUrl,
         },
+      }
+      if (!params.styleReferenceUrl && params.characterReferenceUrls?.[0]) {
+        console.log(`[Luma] Using character reference image as frame0: ${imageUrl.substring(0, 60)}...`)
       }
     }
 
