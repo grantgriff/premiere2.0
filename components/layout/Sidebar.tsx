@@ -8,7 +8,6 @@ import {
   MoreHorizontal,
   Trash2,
   Pencil,
-  Sparkles,
   ChevronDown,
   ChevronRight,
   Youtube,
@@ -307,9 +306,8 @@ export function Sidebar() {
             <p className="text-sm font-medium text-foreground truncate">
               {user?.name || 'Guest'}
             </p>
-            <p className="text-xs text-foreground-secondary flex items-center gap-1">
-              <Sparkles className="w-3 h-3" />
-              {user?.credits ?? 0} credits
+            <p className="text-xs text-foreground-secondary truncate">
+              {user?.email || ''}
             </p>
           </div>
         </div>

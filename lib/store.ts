@@ -44,7 +44,6 @@ export interface User {
   name: string
   email: string
   avatarUrl: string | null
-  credits: number
 }
 
 export interface Character {
@@ -150,7 +149,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     name: 'Demo User',
     email: 'demo@videocraft.ai',
     avatarUrl: null,
-    credits: 100,
   },
   setUser: (user) => set({ user }),
 
@@ -282,9 +280,6 @@ export const useActiveConversation = () => {
   return conversations.find((c) => c.id === activeId) || null
 }
 
-export const useUserCredits = () => {
-  return useAppStore((state) => state.user?.credits ?? 0)
-}
 
 // Analytics selectors
 export const useAnalytics = () => {

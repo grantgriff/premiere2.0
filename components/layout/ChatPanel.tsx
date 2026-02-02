@@ -27,13 +27,13 @@ interface UploadedFile {
   previewUrl: string
 }
 
-const MODELS: { id: VideoModel; name: string; speed: string }[] = [
+const MODELS: { id: VideoModel; name: string; speed: string; disabled?: boolean }[] = [
   { id: 'luma', name: 'Luma AI', speed: '5-10s' },
   { id: 'veo3_1', name: 'Veo 3.1', speed: '45-60s' },
   { id: 'runway', name: 'Runway', speed: '30-45s' },
   { id: 'sora', name: 'Sora', speed: '30-60s' },
-  { id: 'odyssey', name: 'Odyssey', speed: '20-40s' },
-  { id: 'world_labs', name: 'World Labs', speed: '30-45s' },
+  { id: 'odyssey', name: 'Odyssey', speed: '20-40s', disabled: true },
+  { id: 'world_labs', name: 'World Labs', speed: '30-45s', disabled: true },
 ]
 
 const DURATIONS = [1, 3, 5, 10, 15, 30]
@@ -202,11 +202,6 @@ export function ChatPanel() {
         completedAt: null,
       }
       addVideo(convId, video)
-
-      // Update credits
-      if (response.creditsRemaining !== undefined && user) {
-        setUser({ ...user, credits: response.creditsRemaining })
-      }
 
       // Poll for completion
       pollVideoStatus(response.videoId, (status: VideoStatusResponse) => {
@@ -485,12 +480,13 @@ export function ChatPanel() {
           {MODELS.map((model) => (
             <button
               key={model.id}
-              onClick={() => setSelectedModel(model.id)}
-              className={`model-chip text-xs ${selectedModel === model.id ? 'model-chip-active' : ''}`}
-              title={`Generation time: ${model.speed}`}
-              disabled={isGenerating}
+              onClick={() => !model.disabled && setSelectedModel(model.id)}
+              className={`model-chip text-xs ${selectedModel === model.id ? 'model-chip-active' : ''} ${model.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+              title={model.disabled ? 'Coming soon' : `Generation time: ${model.speed}`}
+              disabled={isGenerating || model.disabled}
             >
               {model.name}
+              {model.disabled && <span className="ml-1 text-[10px]">(soon)</span>}
             </button>
           ))}
         </div>
@@ -511,12 +507,6 @@ export function ChatPanel() {
             </button>
           ))}
         </div>
-      </div>
-
-      {/* Credits Display */}
-      <div className="px-4 py-2 border-t border-border text-xs text-foreground-secondary flex justify-between">
-        <span>Credits: {user?.credits ?? 0}</span>
-        <span>Cost: {selectedDuration} credits</span>
       </div>
 
       {/* Selected Characters */}
@@ -714,7 +704,7 @@ export function ChatPanel() {
           <span className="text-xs text-foreground-secondary">{input.length}/2000</span>
           <button
             type="submit"
-            disabled={!input.trim() || isGenerating || (user?.credits ?? 0) < selectedDuration}
+            disabled={!input.trim() || isGenerating}
             className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isGenerating ? (
