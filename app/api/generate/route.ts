@@ -109,13 +109,28 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Determine the primary style reference (image or video URL)
+    // styleReferences contains typed references: { type: 'youtube' | 'upload' | 'url', url, title? }
+    let primaryStyleUrl: string | undefined
+    if (styleReferences && styleReferences.length > 0) {
+      // Use the first uploaded/URL reference (prioritize direct uploads over YouTube)
+      const directRef = styleReferences.find((r: { type: string; url: string }) =>
+        r.type === 'upload' || r.type === 'url'
+      )
+      primaryStyleUrl = directRef?.url || styleReferences[0]?.url
+    } else if (styleReferenceUrls && styleReferenceUrls.length > 0) {
+      primaryStyleUrl = styleReferenceUrls[0]
+    }
+
     // Actually call the video generation API
     console.log(`[Generate] Starting ${model} generation for video ${videoId}`)
+    console.log(`[Generate] Style reference: ${primaryStyleUrl || 'none'}`)
+
     const genResult = await generateVideo(model as VideoModelId, {
       prompt,
       duration,
       aspectRatio: '16:9',
-      styleReferenceUrl: styleReferenceUrls?.[0], // Use first reference URL
+      styleReferenceUrl: primaryStyleUrl,
     })
 
     if (!genResult.success || !genResult.jobId) {

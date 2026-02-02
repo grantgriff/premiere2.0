@@ -12,7 +12,7 @@ import {
   User,
 } from 'lucide-react'
 import { useAppStore, useActiveConversation, VideoModel } from '@/lib/store'
-import { startGeneration, pollVideoStatus, verifyVideoQuality, VideoStatusResponse, StyleReference } from '@/lib/api'
+import { startGeneration, pollVideoStatus, verifyVideoQuality, VideoStatusResponse, StyleReference, createConversation as createConversationApi, createMessage as createMessageApi } from '@/lib/api'
 import { generateId } from '@/lib/utils'
 import { QualityReport } from '@/lib/models/types'
 import { CharacterMention, extractCharacterMentions } from '@/components/ui/CharacterMention'
@@ -92,9 +92,14 @@ export function ChatPanel() {
     // Create or get conversation
     let convId = activeConversationId
     if (!convId) {
+      const title = prompt.slice(0, 40) + (prompt.length > 40 ? '...' : '')
+
+      // Create in database first
+      const dbConversation = await createConversationApi(user.id, title)
+
       const newConv = {
-        id: generateId(),
-        title: prompt.slice(0, 40) + (prompt.length > 40 ? '...' : ''),
+        id: dbConversation?.id || generateId(),
+        title,
         messages: [],
         videos: [],
         createdAt: new Date(),
@@ -113,13 +118,20 @@ export function ChatPanel() {
     }
     addMessage(convId, userMessage)
 
+    // Save user message to database
+    createMessageApi(convId, 'user', prompt)
+
     // Add assistant "generating" message
-    addMessage(convId, {
+    const generatingMessage = {
       id: generateId(),
       role: 'assistant' as const,
       content: `Generating ${selectedDuration}s video with ${MODELS.find(m => m.id === selectedModel)?.name}...`,
       timestamp: new Date(),
-    })
+    }
+    addMessage(convId, generatingMessage)
+
+    // Save generating message to database
+    createMessageApi(convId, 'assistant', generatingMessage.content)
 
     try {
       // Upload files to storage first
@@ -225,13 +237,15 @@ export function ChatPanel() {
           updateVideo(convId!, response.videoId!, { isVerifying: true })
 
           // Add initial completion message
+          const completionContent = 'Video ready! Running quality verification...'
           addMessage(convId!, {
             id: generateId(),
             role: 'assistant' as const,
-            content: 'Video ready! Running quality verification...',
+            content: completionContent,
             timestamp: new Date(),
             videoId: response.videoId,
           })
+          createMessageApi(convId!, 'assistant', completionContent, response.videoId)
 
           // Run quality verification
           verifyVideoQuality(response.videoId!, status.videoUrl).then((verifyResult) => {
@@ -269,12 +283,14 @@ export function ChatPanel() {
               const qualityLabel = verifyResult.qualityScore >= 8 ? 'Excellent' :
                                    verifyResult.qualityScore >= 6 ? 'Good' :
                                    verifyResult.qualityScore >= 4 ? 'Fair' : 'Poor'
+              const qualityContent = `Quality verified: ${verifyResult.qualityScore.toFixed(1)}/10 (${qualityLabel})${verifyResult.hasHighSeverityIssues ? ' - Some issues detected' : ''}`
               addMessage(convId!, {
                 id: generateId(),
                 role: 'assistant' as const,
-                content: `Quality verified: ${verifyResult.qualityScore.toFixed(1)}/10 (${qualityLabel})${verifyResult.hasHighSeverityIssues ? ' - Some issues detected' : ''}`,
+                content: qualityContent,
                 timestamp: new Date(),
               })
+              createMessageApi(convId!, 'assistant', qualityContent)
             } else {
               // Verification failed
               updateVideo(convId!, response.videoId!, { isVerifying: false })
@@ -300,12 +316,14 @@ export function ChatPanel() {
           })
         } else if (status.status === 'failed') {
           setIsGenerating(false)
+          const failContent = `Generation failed: ${status.error || 'Unknown error'}`
           addMessage(convId!, {
             id: generateId(),
             role: 'assistant' as const,
-            content: `Generation failed: ${status.error || 'Unknown error'}`,
+            content: failContent,
             timestamp: new Date(),
           })
+          createMessageApi(convId!, 'assistant', failContent)
         }
       })
       // Clear uploaded files after successful submission
@@ -313,12 +331,14 @@ export function ChatPanel() {
       setSelectedYouTubeVideos([])
     } catch (error) {
       setIsGenerating(false)
+      const errorContent = `Error: ${error instanceof Error ? error.message : 'Failed to generate video'}`
       addMessage(convId, {
         id: generateId(),
         role: 'assistant' as const,
-        content: `Error: ${error instanceof Error ? error.message : 'Failed to generate video'}`,
+        content: errorContent,
         timestamp: new Date(),
       })
+      createMessageApi(convId, 'assistant', errorContent)
     }
   }
 

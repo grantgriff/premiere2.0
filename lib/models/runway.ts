@@ -1,29 +1,38 @@
-// Runway Gen-3 API Integration
+// Runway API Integration
+// Docs: https://docs.dev.runwayml.com/
 import { GenerationParams, GenerationResult, GenerationStatus } from './types'
 
 const RUNWAY_API_BASE = 'https://api.runwayml.com/v1'
+const RUNWAY_API_VERSION = '2024-11-06'
 
-interface RunwayGenerateRequest {
-  prompt: string
-  duration: number
-  model: string
-  aspectRatio?: string
-  seed?: number
-  motion?: number
-  styleReference?: {
-    url: string
-    weight: number
-  }
+// Models for different input types
+const RUNWAY_MODELS = {
+  textToVideo: 'veo3.1',        // Text-only uses Veo through Runway
+  imageToVideo: 'gen4_turbo',   // Image input uses Gen4 Turbo
+  videoToVideo: 'gen4_aleph',   // Video input uses Gen4 Aleph
 }
 
-interface RunwayGenerateResponse {
+interface RunwayTaskResponse {
   id: string
-  status: 'PENDING' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED'
-  output?: {
-    video_url: string
-    thumbnail_url: string
+}
+
+interface RunwayTaskStatus {
+  id: string
+  status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'THROTTLED'
+  createdAt: string
+  failure?: string
+  failureCode?: string
+  output?: string[]  // Array of output URLs
+  progress?: number
+}
+
+function getHeaders(apiKey: string): HeadersInit {
+  return {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${apiKey}`,
+    'X-Runway-Version': RUNWAY_API_VERSION,
   }
-  error?: string
 }
 
 export async function generateWithRunway(params: GenerationParams): Promise<GenerationResult> {
@@ -33,43 +42,73 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
   }
 
   try {
-    const request: RunwayGenerateRequest = {
-      prompt: params.prompt,
-      duration: Math.min(params.duration, 18), // Runway max is 18s
-      model: 'gen-3-alpha',
-      aspectRatio: params.aspectRatio || '16:9',
-    }
+    // Determine which endpoint to use based on input
+    const hasImageInput = params.styleReferenceUrl && isImageUrl(params.styleReferenceUrl)
+    const hasVideoInput = params.styleReferenceUrl && isVideoUrl(params.styleReferenceUrl)
 
-    // Add style reference if provided
-    if (params.styleReferenceUrl && params.styleInfluence) {
-      request.styleReference = {
-        url: params.styleReferenceUrl,
-        weight: params.styleInfluence / 100,
+    let endpoint: string
+    let requestBody: Record<string, unknown>
+
+    if (hasVideoInput) {
+      // Video-to-video
+      endpoint = `${RUNWAY_API_BASE}/video_to_video`
+      requestBody = {
+        model: RUNWAY_MODELS.videoToVideo,
+        videoUri: params.styleReferenceUrl,
+        promptText: params.prompt,
+        ratio: formatRatio(params.aspectRatio || '16:9'),
+      }
+    } else if (hasImageInput) {
+      // Image-to-video
+      endpoint = `${RUNWAY_API_BASE}/image_to_video`
+      requestBody = {
+        model: RUNWAY_MODELS.imageToVideo,
+        promptImage: params.styleReferenceUrl,
+        promptText: params.prompt,
+        ratio: formatRatio(params.aspectRatio || '16:9'),
+        duration: Math.min(params.duration, 10), // Gen4 max is 10s
+      }
+    } else {
+      // Text-to-video
+      endpoint = `${RUNWAY_API_BASE}/text_to_video`
+      requestBody = {
+        model: RUNWAY_MODELS.textToVideo,
+        promptText: params.prompt,
+        ratio: formatRatioForTextToVideo(params.aspectRatio || '16:9'),
+        duration: Math.min(params.duration, 8), // Veo max durations: 4, 6, 8
+        audio: true,
       }
     }
 
-    const response = await fetch(`${RUNWAY_API_BASE}/generations`, {
+    console.log('Runway request:', endpoint, JSON.stringify(requestBody, null, 2))
+
+    const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(request),
+      headers: getHeaders(apiKey),
+      body: JSON.stringify(requestBody),
     })
 
     if (!response.ok) {
-      const error = await response.text()
-      return { success: false, error: `Runway API error: ${error}` }
+      const errorText = await response.text()
+      console.error('Runway API error:', response.status, errorText)
+
+      if (response.status === 429) {
+        return { success: false, error: 'Runway rate limit exceeded. Please try again later.' }
+      }
+
+      return { success: false, error: `Runway API error (${response.status}): ${errorText}` }
     }
 
-    const data: RunwayGenerateResponse = await response.json()
+    const data: RunwayTaskResponse = await response.json()
+    console.log('Runway task created:', data.id)
 
     return {
       success: true,
       jobId: data.id,
-      estimatedTime: 45,
+      estimatedTime: hasVideoInput ? 60 : hasImageInput ? 45 : 30,
     }
   } catch (error) {
+    console.error('Runway generation error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -77,44 +116,95 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
   }
 }
 
-export async function checkRunwayStatus(jobId: string): Promise<GenerationStatus> {
+export async function checkRunwayStatus(taskId: string): Promise<GenerationStatus> {
   const apiKey = process.env.RUNWAY_API_KEY
   if (!apiKey) {
     return { status: 'failed', error: 'Runway API key not configured' }
   }
 
   try {
-    const response = await fetch(`${RUNWAY_API_BASE}/generations/${jobId}`, {
+    const response = await fetch(`${RUNWAY_API_BASE}/tasks/${taskId}`, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: getHeaders(apiKey),
     })
 
     if (!response.ok) {
-      return { status: 'failed', error: 'Failed to check status' }
+      if (response.status === 404) {
+        return { status: 'failed', error: 'Task not found or was deleted' }
+      }
+      const errorText = await response.text()
+      console.error('Runway status check error:', response.status, errorText)
+      return { status: 'failed', error: `Failed to check status: ${response.status}` }
     }
 
-    const data: RunwayGenerateResponse = await response.json()
+    const data: RunwayTaskStatus = await response.json()
+    console.log('Runway task status:', data.status, data.id)
 
     switch (data.status) {
       case 'SUCCEEDED':
         return {
           status: 'completed',
-          videoUrl: data.output?.video_url,
-          thumbnailUrl: data.output?.thumbnail_url,
+          videoUrl: data.output?.[0] || undefined,
+          thumbnailUrl: undefined, // Runway doesn't provide separate thumbnail
         }
       case 'FAILED':
-        return { status: 'failed', error: data.error || 'Generation failed' }
-      case 'PROCESSING':
+        return {
+          status: 'failed',
+          error: data.failure || data.failureCode || 'Generation failed'
+        }
+      case 'RUNNING':
         return { status: 'processing' }
+      case 'PENDING':
+      case 'THROTTLED':
       default:
         return { status: 'pending' }
     }
   } catch (error) {
+    console.error('Runway status check error:', error)
     return {
       status: 'failed',
       error: error instanceof Error ? error.message : 'Unknown error',
     }
   }
+}
+
+// Helper: Check if URL is likely an image
+function isImageUrl(url: string): boolean {
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+  const lowerUrl = url.toLowerCase()
+  return imageExtensions.some(ext => lowerUrl.includes(ext)) ||
+         lowerUrl.includes('image') ||
+         (!lowerUrl.includes('video') && !lowerUrl.includes('.mp4') && !lowerUrl.includes('.mov'))
+}
+
+// Helper: Check if URL is likely a video
+function isVideoUrl(url: string): boolean {
+  const videoExtensions = ['.mp4', '.mov', '.avi', '.webm', '.mkv']
+  const lowerUrl = url.toLowerCase()
+  return videoExtensions.some(ext => lowerUrl.includes(ext)) || lowerUrl.includes('video')
+}
+
+// Helper: Format aspect ratio for image-to-video/video-to-video
+// Accepted: "1280:720", "720:1280", "1104:832", "832:1104", "960:960", "1584:672"
+function formatRatio(ratio: string): string {
+  const ratioMap: Record<string, string> = {
+    '16:9': '1280:720',
+    '9:16': '720:1280',
+    '4:3': '1104:832',
+    '3:4': '832:1104',
+    '1:1': '960:960',
+    '21:9': '1584:672',
+  }
+  return ratioMap[ratio] || '1280:720'
+}
+
+// Helper: Format aspect ratio for text-to-video (Veo through Runway)
+// Accepted: "1280:720", "720:1280", "1080:1920", "1920:1080"
+function formatRatioForTextToVideo(ratio: string): string {
+  const ratioMap: Record<string, string> = {
+    '16:9': '1280:720',
+    '9:16': '720:1280',
+    '1:1': '1280:720', // No 1:1 for text-to-video, default to 16:9
+  }
+  return ratioMap[ratio] || '1280:720'
 }

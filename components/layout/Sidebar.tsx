@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useAppStore, Conversation } from '@/lib/store'
 import { YouTubeConnect } from '@/components/ui/YouTubeConnect'
+import { deleteConversationApi } from '@/lib/api'
 
 // Group conversations by date
 function groupConversationsByDate(conversations: Conversation[]) {
@@ -101,8 +102,15 @@ export function Sidebar() {
     }
   }
 
-  const handleDeleteConversation = (e: React.MouseEvent, id: string) => {
+  const handleDeleteConversation = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
+
+    // Delete from database
+    if (user?.id) {
+      deleteConversationApi(id, user.id)
+    }
+
+    // Delete from local store
     deleteConversation(id)
     setMenuOpenId(null)
     if (activeConversationId === id) {

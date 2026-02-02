@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS messages (
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
   content TEXT NOT NULL DEFAULT '',
-  media_urls JSONB NOT NULL DEFAULT '[]',
+  video_id UUID REFERENCES videos(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS characters (
   name TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
   reference_image_url TEXT,
+  thumbnail_url TEXT,
+  embedding_status TEXT NOT NULL DEFAULT 'pending' CHECK (embedding_status IN ('pending', 'processing', 'ready', 'failed')),
   embedding_data JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -197,3 +199,23 @@ CREATE TRIGGER update_conversations_updated_at
 CREATE TRIGGER update_characters_updated_at
   BEFORE UPDATE ON characters
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
+-- MIGRATION COMMANDS
+-- Run these if you already have the tables created
+-- =====================================================
+
+-- Add embedding_status and thumbnail_url to characters table
+ALTER TABLE characters
+ADD COLUMN IF NOT EXISTS embedding_status TEXT DEFAULT 'pending';
+
+ALTER TABLE characters
+ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+
+-- Add constraint if not exists (run separately if needed)
+-- ALTER TABLE characters ADD CONSTRAINT characters_embedding_status_check
+--   CHECK (embedding_status IN ('pending', 'processing', 'ready', 'failed'));
+
+-- Add video_id to messages table
+ALTER TABLE messages
+ADD COLUMN IF NOT EXISTS video_id UUID REFERENCES videos(id) ON DELETE SET NULL;

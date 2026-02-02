@@ -339,3 +339,133 @@ function simulateVerification(): VerifyResponse {
     hasHighSeverityIssues: false,
   }
 }
+
+// Conversation types
+export interface ConversationResponse {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  messages: Array<{
+    id: string
+    role: 'user' | 'assistant' | 'system'
+    content: string
+    timestamp: string
+    videoId?: string | null
+  }>
+  videos: Array<{
+    id: string
+    prompt: string
+    model: VideoModel
+    duration: number
+    status: 'pending' | 'processing' | 'completed' | 'failed'
+    videoUrl: string | null
+    thumbnailUrl: string | null
+    qualityScore: number | null
+    qualityReport: Record<string, unknown> | null
+    createdAt: string
+    completedAt: string | null
+  }>
+}
+
+// Fetch all conversations for a user
+export async function fetchConversations(userId: string): Promise<ConversationResponse[]> {
+  try {
+    const response = await fetch(`/api/conversations?userId=${encodeURIComponent(userId)}`)
+    if (response.ok) {
+      const data = await response.json()
+      return data.conversations || []
+    }
+    console.warn('Failed to fetch conversations:', response.status)
+    return []
+  } catch (error) {
+    console.warn('Error fetching conversations:', error)
+    return []
+  }
+}
+
+// Fetch a single conversation with details
+export async function fetchConversationDetails(conversationId: string, userId: string): Promise<ConversationResponse | null> {
+  try {
+    const response = await fetch(`/api/conversations?id=${conversationId}&userId=${encodeURIComponent(userId)}`)
+    if (response.ok) {
+      const data = await response.json()
+      return data.conversation || null
+    }
+    return null
+  } catch (error) {
+    console.warn('Error fetching conversation details:', error)
+    return null
+  }
+}
+
+// Create a new conversation
+export async function createConversation(userId: string, title?: string): Promise<ConversationResponse | null> {
+  try {
+    const response = await fetch('/api/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, title }),
+    })
+    if (response.ok) {
+      const data = await response.json()
+      return data.conversation || null
+    }
+    return null
+  } catch (error) {
+    console.warn('Error creating conversation:', error)
+    return null
+  }
+}
+
+// Update a conversation
+export async function updateConversationTitle(id: string, userId: string, title: string): Promise<boolean> {
+  try {
+    const response = await fetch('/api/conversations', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, userId, title }),
+    })
+    return response.ok
+  } catch (error) {
+    console.warn('Error updating conversation:', error)
+    return false
+  }
+}
+
+// Delete a conversation
+export async function deleteConversationApi(id: string, userId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/conversations?id=${id}&userId=${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+    })
+    return response.ok
+  } catch (error) {
+    console.warn('Error deleting conversation:', error)
+    return false
+  }
+}
+
+// Create a message
+export async function createMessage(
+  conversationId: string,
+  role: 'user' | 'assistant' | 'system',
+  content: string,
+  videoId?: string
+): Promise<{ id: string } | null> {
+  try {
+    const response = await fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId, role, content, videoId }),
+    })
+    if (response.ok) {
+      const data = await response.json()
+      return data.message || null
+    }
+    return null
+  } catch (error) {
+    console.warn('Error creating message:', error)
+    return null
+  }
+}

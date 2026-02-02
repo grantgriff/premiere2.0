@@ -1,72 +1,96 @@
 // Google Veo 3.1 API Integration
+// Docs: https://ai.google.dev/gemini-api/docs/video
 import { GenerationParams, GenerationResult, GenerationStatus } from './types'
 
 const VEO_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
+const VEO_MODEL = 'veo-3.1-generate-preview'
 
 interface VeoGenerateRequest {
-  model: string
-  contents: {
-    role: string
-    parts: {
-      text?: string
-      inlineData?: {
-        mimeType: string
-        data: string
-      }
-    }[]
-  }[]
-  generationConfig: {
-    videoDurationSeconds: number
-    aspectRatio?: string
+  prompt: string
+  config?: {
+    aspectRatio?: '16:9' | '9:16'
+    resolution?: '720p' | '1080p' | '4k'
+    durationSeconds?: 4 | 6 | 8
+    personGeneration?: 'allow_all' | 'allow_adult'
+    negativePrompt?: string
+  }
+  image?: {
+    bytesBase64Encoded?: string
+    mimeType?: string
+    fileUri?: string
   }
 }
 
 interface VeoGenerateResponse {
   name: string // Operation name for polling
+  done?: boolean
+  error?: {
+    code: number
+    message: string
+    status: string
+  }
+}
+
+interface VeoOperationResponse {
+  name: string
   done: boolean
-  result?: {
-    videos: {
-      uri: string
-      thumbnailUri: string
-    }[]
+  metadata?: Record<string, unknown>
+  response?: {
+    generatedVideos: Array<{
+      video: {
+        uri: string
+        mimeType?: string
+      }
+    }>
   }
   error?: {
     code: number
     message: string
+    status: string
   }
 }
 
 export async function generateWithVeo(params: GenerationParams): Promise<GenerationResult> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
-    return { success: false, error: 'Gemini API key not configured (needed for Veo)' }
+    return { success: false, error: 'Gemini API key not configured (needed for Veo). Get one at ai.google.dev' }
   }
 
   try {
+    // Map duration to allowed values (4, 6, 8)
+    let duration: 4 | 6 | 8 = 8
+    if (params.duration <= 4) duration = 4
+    else if (params.duration <= 6) duration = 6
+    else duration = 8
+
+    // Map aspect ratio
+    const aspectRatio: '16:9' | '9:16' = params.aspectRatio === '9:16' ? '9:16' : '16:9'
+
     const request: VeoGenerateRequest = {
-      model: 'models/veo-3.1',
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: params.prompt }],
-        },
-      ],
-      generationConfig: {
-        videoDurationSeconds: params.duration,
-        aspectRatio: params.aspectRatio || '16:9',
+      prompt: params.prompt,
+      config: {
+        aspectRatio,
+        resolution: '720p', // Default to 720p for faster generation
+        durationSeconds: duration,
+        personGeneration: 'allow_adult',
       },
     }
 
-    // Add style reference if provided
+    // Add image for image-to-video if provided
     if (params.styleReferenceUrl) {
-      // In production, fetch the image and convert to base64
-      request.contents[0].parts.push({
-        text: `Style reference: ${params.styleReferenceUrl}`,
-      })
+      // If it's a file URI or https URL, use fileUri
+      if (params.styleReferenceUrl.startsWith('http') || params.styleReferenceUrl.startsWith('gs://')) {
+        request.image = {
+          fileUri: params.styleReferenceUrl,
+        }
+      }
+      // Note: For base64 images, you'd use bytesBase64Encoded instead
     }
 
+    console.log('Veo request:', JSON.stringify(request, null, 2))
+
     const response = await fetch(
-      `${VEO_API_BASE}/models/veo-3.1:generateVideo?key=${apiKey}`,
+      `${VEO_API_BASE}/models/${VEO_MODEL}:generateVideos?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
@@ -77,22 +101,40 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
     )
 
     if (!response.ok) {
-      const error = await response.text()
-      return { success: false, error: `Veo API error: ${error}` }
+      const errorText = await response.text()
+      console.error('Veo API error response:', response.status, errorText)
+
+      if (response.status === 403) {
+        return { success: false, error: 'Veo API access denied. Make sure billing is enabled and Veo API is enabled in your Google Cloud project.' }
+      }
+      if (response.status === 404) {
+        return { success: false, error: 'Veo model not found. The Veo API may not be available in your region.' }
+      }
+      if (response.status === 429) {
+        return { success: false, error: 'Veo rate limit exceeded. Please try again later.' }
+      }
+
+      return { success: false, error: `Veo API error (${response.status}): ${errorText}` }
     }
 
     const data: VeoGenerateResponse = await response.json()
+    console.log('Veo response:', JSON.stringify(data, null, 2))
 
     if (data.error) {
       return { success: false, error: data.error.message }
     }
 
+    if (!data.name) {
+      return { success: false, error: 'Veo API did not return an operation name' }
+    }
+
     return {
       success: true,
       jobId: data.name,
-      estimatedTime: 60,
+      estimatedTime: duration === 8 ? 60 : 45, // Longer videos take more time
     }
   } catch (error) {
+    console.error('Veo generation error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -107,8 +149,14 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
   }
 
   try {
+    // The operation name is the full path returned from generateVideos
+    // Format: operations/{operation_id} or just the operation name
+    const opPath = operationName.startsWith('operations/')
+      ? operationName
+      : `operations/${operationName}`
+
     const response = await fetch(
-      `${VEO_API_BASE}/${operationName}?key=${apiKey}`,
+      `${VEO_API_BASE}/${opPath}?key=${apiKey}`,
       {
         method: 'GET',
         headers: {
@@ -118,25 +166,34 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
     )
 
     if (!response.ok) {
-      return { status: 'failed', error: 'Failed to check status' }
+      const errorText = await response.text()
+      console.error('Veo status check error:', response.status, errorText)
+      return { status: 'failed', error: `Failed to check status: ${response.status}` }
     }
 
-    const data: VeoGenerateResponse = await response.json()
+    const data: VeoOperationResponse = await response.json()
+    console.log('Veo operation status:', data.done ? 'done' : 'pending', data.name)
 
     if (data.error) {
       return { status: 'failed', error: data.error.message }
     }
 
-    if (data.done && data.result) {
-      return {
-        status: 'completed',
-        videoUrl: data.result.videos[0]?.uri,
-        thumbnailUrl: data.result.videos[0]?.thumbnailUri,
+    if (data.done && data.response?.generatedVideos) {
+      const video = data.response.generatedVideos[0]
+      if (video?.video?.uri) {
+        return {
+          status: 'completed',
+          videoUrl: video.video.uri,
+          thumbnailUrl: undefined, // Veo doesn't provide thumbnails
+        }
       }
+      return { status: 'failed', error: 'Video generated but no URI returned' }
     }
 
+    // Still processing
     return { status: 'processing' }
   } catch (error) {
+    console.error('Veo status check exception:', error)
     return {
       status: 'failed',
       error: error instanceof Error ? error.message : 'Unknown error',
