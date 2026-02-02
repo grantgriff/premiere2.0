@@ -70,9 +70,10 @@ interface VeoOperationResponse {
 }
 
 export async function generateWithVeo(params: GenerationParams): Promise<GenerationResult> {
-  const apiKey = process.env.GEMINI_API_KEY
+  // Accept both GOOGLE_AI_API_KEY and GEMINI_API_KEY for backwards compatibility
+  const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY
   if (!apiKey) {
-    return { success: false, error: 'Gemini API key not configured (needed for Veo). Get one at ai.google.dev' }
+    return { success: false, error: 'Google AI API key not configured (needed for Veo). Set GOOGLE_AI_API_KEY in environment.' }
   }
 
   try {
@@ -184,9 +185,9 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
 }
 
 export async function checkVeoStatus(operationName: string): Promise<GenerationStatus> {
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY
   if (!apiKey) {
-    return { status: 'failed', error: 'Gemini API key not configured' }
+    return { status: 'failed', error: 'Google AI API key not configured' }
   }
 
   try {

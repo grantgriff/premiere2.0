@@ -106,9 +106,10 @@ export async function analyzeVideoQuality(
   videoUrl: string,
   characterReferenceUrl?: string
 ): Promise<QualityReport | null> {
-  const apiKey = process.env.GEMINI_API_KEY
+  // Accept both GOOGLE_AI_API_KEY and GEMINI_API_KEY for backwards compatibility
+  const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY
   if (!apiKey) {
-    console.error('[Gemini] API key not configured')
+    console.error('[Gemini] API key not configured - set GOOGLE_AI_API_KEY')
     return null
   }
 
