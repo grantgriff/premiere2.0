@@ -15,10 +15,12 @@ import {
   Youtube,
   Share2,
 } from 'lucide-react'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, Video } from '@/lib/store'
 import { QualityBadge } from '@/components/ui/QualityBadge'
 import { QualityReport } from '@/lib/models/types'
 import { YouTubeUploadPanel } from '@/components/ui/YouTubeUploadPanel'
+import { EditingPanel } from '@/components/ui/EditingPanel'
+import { Segment } from '@/components/ui/VideoTimeline'
 
 export function VideoPanel() {
   const currentVideo = useAppStore((state) => state.currentVideo)
@@ -31,6 +33,8 @@ export function VideoPanel() {
   const [progress, setProgress] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [showYouTubeUpload, setShowYouTubeUpload] = useState(false)
+  const [showEditingPanel, setShowEditingPanel] = useState(false)
+  const [isEditProcessing, setIsEditProcessing] = useState(false)
 
   // Handle video time updates
   useEffect(() => {
@@ -107,6 +111,56 @@ export function VideoPanel() {
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
     return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // Seek to specific time (for editing panel)
+  const handleSeekTo = (time: number) => {
+    const video = videoRef.current
+    if (!video) return
+    video.currentTime = time
+    setCurrentTime(time)
+  }
+
+  // Handle extend video
+  const handleExtend = async (fromTime: number, prompt: string, duration: number) => {
+    setIsEditProcessing(true)
+    try {
+      // TODO: Implement extend functionality via API
+      console.log('Extend video:', { fromTime, prompt, duration })
+      alert('Extend functionality coming soon!')
+    } finally {
+      setIsEditProcessing(false)
+    }
+  }
+
+  // Handle remix segment
+  const handleRemix = async (segment: Segment, prompt: string) => {
+    setIsEditProcessing(true)
+    try {
+      // TODO: Implement remix functionality via API
+      console.log('Remix segment:', { segment, prompt })
+      alert('Remix functionality coming soon!')
+    } finally {
+      setIsEditProcessing(false)
+    }
+  }
+
+  // Handle trim video
+  const handleTrim = async (startTime: number, endTime: number) => {
+    setIsEditProcessing(true)
+    try {
+      // TODO: Update video state after trim
+      console.log('Trim video:', { startTime, endTime })
+    } finally {
+      setIsEditProcessing(false)
+    }
+  }
+
+  // Handle regenerate
+  const handleRegenerate = () => {
+    if (!currentVideo) return
+    // TODO: Trigger regeneration with same prompt
+    alert(`Regenerate functionality coming soon!\nPrompt: ${currentVideo.prompt}`)
   }
 
   return (
@@ -238,13 +292,19 @@ export function VideoPanel() {
                   <Download className="w-4 h-4" />
                   Download
                 </button>
-                <button className="btn-secondary flex items-center gap-2">
+                <button
+                  onClick={handleRegenerate}
+                  className="btn-secondary flex items-center gap-2"
+                >
                   <RefreshCw className="w-4 h-4" />
                   Regenerate
                 </button>
-                <button className="btn-secondary flex items-center gap-2">
+                <button
+                  onClick={() => setShowEditingPanel(!showEditingPanel)}
+                  className={`btn-secondary flex items-center gap-2 ${showEditingPanel ? 'bg-accent/20 border-accent' : ''}`}
+                >
                   <Scissors className="w-4 h-4" />
-                  Edit Segment
+                  {showEditingPanel ? 'Close Editor' : 'Edit Segment'}
                 </button>
                 <div className="flex-1" />
                 <button
@@ -255,6 +315,22 @@ export function VideoPanel() {
                   Upload to YouTube
                 </button>
               </div>
+
+              {/* Editing Panel */}
+              {showEditingPanel && currentVideo && (
+                <div className="mt-4">
+                  <EditingPanel
+                    video={currentVideo as Video}
+                    currentTime={currentTime}
+                    onSeek={handleSeekTo}
+                    onExtend={handleExtend}
+                    onRemix={handleRemix}
+                    onTrim={handleTrim}
+                    onClose={() => setShowEditingPanel(false)}
+                    isProcessing={isEditProcessing}
+                  />
+                </div>
+              )}
             </div>
           </div>
         ) : (
