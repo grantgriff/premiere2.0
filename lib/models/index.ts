@@ -3,6 +3,7 @@ import { VideoModelId, GenerationParams, GenerationResult, GenerationStatus, MOD
 import { generateWithVeo, checkVeoStatus } from './veo'
 import { generateWithRunway, checkRunwayStatus } from './runway'
 import { generateWithLuma, checkLumaStatus } from './luma'
+import { generateWithSora, checkSoraStatus } from './sora'
 
 export * from './types'
 export { analyzeVideoQuality, meetsQualityThreshold, getHighSeverityIssues } from './gemini'
@@ -30,8 +31,7 @@ export async function generateVideo(
       case 'luma':
         return await generateWithLuma(params)
       case 'sora':
-        // Sora not yet implemented
-        return { success: false, error: 'Sora integration coming soon' }
+        return await generateWithSora(params)
       case 'odyssey':
         // Odyssey not yet implemented
         return { success: false, error: 'Odyssey integration coming soon' }
@@ -63,6 +63,8 @@ export async function checkGenerationStatus(
       return checkRunwayStatus(jobId)
     case 'luma':
       return checkLumaStatus(jobId)
+    case 'sora':
+      return checkSoraStatus(jobId)
     default:
       return { status: 'failed', error: `Status check not implemented for ${model}` }
   }
