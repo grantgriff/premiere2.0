@@ -21,24 +21,33 @@ export async function generateVideo(
     }
   }
 
-  switch (model) {
-    case 'veo3_1':
-      return generateWithVeo(params)
-    case 'runway':
-      return generateWithRunway(params)
-    case 'luma':
-      return generateWithLuma(params)
-    case 'sora':
-      // Sora not yet implemented
-      return { success: false, error: 'Sora integration coming soon' }
-    case 'odyssey':
-      // Odyssey not yet implemented
-      return { success: false, error: 'Odyssey integration coming soon' }
-    case 'world_labs':
-      // World Labs not yet implemented
-      return { success: false, error: 'World Labs integration coming soon' }
-    default:
-      return { success: false, error: `Unknown model: ${model}` }
+  try {
+    switch (model) {
+      case 'veo3_1':
+        return await generateWithVeo(params)
+      case 'runway':
+        return await generateWithRunway(params)
+      case 'luma':
+        return await generateWithLuma(params)
+      case 'sora':
+        // Sora not yet implemented
+        return { success: false, error: 'Sora integration coming soon' }
+      case 'odyssey':
+        // Odyssey not yet implemented
+        return { success: false, error: 'Odyssey integration coming soon' }
+      case 'world_labs':
+        // World Labs not yet implemented
+        return { success: false, error: 'World Labs integration coming soon' }
+      default:
+        return { success: false, error: `Unknown model: ${model}` }
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error(`[generateVideo] ${model} threw an exception:`, error)
+    return {
+      success: false,
+      error: `${model} generation failed: ${errorMessage}`,
+    }
   }
 }
 
