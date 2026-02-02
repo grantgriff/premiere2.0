@@ -3,14 +3,14 @@
 import { GenerationParams, GenerationResult, GenerationStatus } from './types'
 
 const VEO_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
-const VEO_MODEL = 'veo-3.1-generate-preview'
+const VEO_MODEL = 'veo-3.1-fast-generate-preview'
 
 interface VeoGenerateRequest {
   prompt: string
   config?: {
     aspectRatio?: '16:9' | '9:16'
     resolution?: '720p' | '1080p' | '4k'
-    durationSeconds?: 4 | 6 | 8
+    durationSeconds?: '4' | '6' | '8' // API expects string values
     personGeneration?: 'allow_all' | 'allow_adult'
     negativePrompt?: string
   }
@@ -66,11 +66,11 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
   }
 
   try {
-    // Map duration to allowed values (4, 6, 8)
-    let duration: 4 | 6 | 8 = 8
-    if (params.duration <= 4) duration = 4
-    else if (params.duration <= 6) duration = 6
-    else duration = 8
+    // Map duration to allowed values (4, 6, 8) as strings
+    let durationSeconds: '4' | '6' | '8' = '8'
+    if (params.duration <= 4) durationSeconds = '4'
+    else if (params.duration <= 6) durationSeconds = '6'
+    else durationSeconds = '8'
 
     // Map aspect ratio
     const aspectRatio: '16:9' | '9:16' = params.aspectRatio === '9:16' ? '9:16' : '16:9'
@@ -80,8 +80,8 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
       config: {
         aspectRatio,
         resolution: '720p', // Default to 720p for faster generation
-        durationSeconds: duration,
-        personGeneration: 'allow_adult',
+        durationSeconds,
+        personGeneration: 'allow_all', // Required for text-to-video
       },
     }
 
@@ -141,7 +141,7 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
     return {
       success: true,
       jobId: data.name,
-      estimatedTime: duration === 8 ? 60 : 45, // Longer videos take more time
+      estimatedTime: durationSeconds === '8' ? 45 : 30, // Fast model is quicker
     }
   } catch (error) {
     console.error('Veo generation error:', error)

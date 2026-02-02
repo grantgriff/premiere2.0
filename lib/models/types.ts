@@ -92,11 +92,11 @@ export interface VideoModel {
 export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'checkStatus'>> = {
   veo3_1: {
     id: 'veo3_1',
-    name: 'Veo 3.1',  // API model: veo-3.1-generate-preview
+    name: 'Veo 3.1',  // API model: veo-3.1-fast-generate-preview
     maxDuration: 8,
-    allowedDurations: [4, 6, 8], // Veo only accepts these values
+    allowedDurations: [4, 6, 8], // Veo only accepts "4", "6", "8" (strings in API)
     supportedInputs: ['text', 'image'],
-    estimatedTime: '45-60s',
+    estimatedTime: '30-45s',
     costPer10Seconds: 0.5,
   },
   runway: {

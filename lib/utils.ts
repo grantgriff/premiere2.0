@@ -43,9 +43,11 @@ export function parseCharacterMentions(prompt: string): string[] {
   return matches ? matches.map((m) => m.slice(1)) : []
 }
 
-// Validate video duration
+// Validate video duration (accepts any duration allowed by any model)
 export function isValidDuration(duration: number): boolean {
-  return [1, 3, 5, 10, 15, 30].includes(duration)
+  // All possible durations across all video models:
+  // Veo: 4, 6, 8  |  Runway: 4, 6, 8, 10  |  Luma: 5, 9, 10  |  Sora: 4, 8, 12
+  return [4, 5, 6, 8, 9, 10, 12].includes(duration)
 }
 
 // Get quality badge color based on score
