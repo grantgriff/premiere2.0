@@ -2,23 +2,8 @@
 // Uses real API routes which connect to Luma, etc.
 
 import { VideoModel } from './store'
-import { generateId } from './utils'
 
-// Check if we should use simulation mode (no API keys)
-const USE_SIMULATION = typeof window !== 'undefined' && !process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('supabase.co')
-
-// Sample video URLs for simulation fallback
-const SAMPLE_VIDEOS = [
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-]
-
-const SAMPLE_THUMBNAILS = [
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/images/ElephantsDream.jpg',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/images/ForBiggerBlazes.jpg',
-]
+// Note: Simulation mode removed - always use real APIs
 
 export interface StyleReference {
   type: 'youtube' | 'upload' | 'url'
@@ -61,96 +46,50 @@ export interface VideoStatusResponse {
   error?: string
 }
 
-// Simulated job storage (client-side only for dev without server)
-interface SimulatedJob {
-  status: 'pending' | 'processing' | 'completed' | 'failed'
-  prompt: string
-  model: VideoModel
-  duration: number
-  startedAt: number
-  completedAt?: number
-  videoUrl?: string
-  thumbnailUrl?: string
-  qualityScore?: number
-}
-
-const simulatedJobs = new Map<string, SimulatedJob>()
 
 // Start video generation
 export async function startGeneration(request: GenerationRequest): Promise<GenerationResponse> {
   try {
-    // Try real API first
     const response = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     })
 
-    if (response.ok) {
-      return response.json()
+    const data = await response.json()
+
+    if (!response.ok) {
+      console.error('[startGeneration] API error:', response.status, data)
+      return {
+        success: false,
+        error: data.error || `API error: ${response.status}`,
+      }
     }
 
-    // If API fails, fall back to simulation
-    console.warn('API failed, using simulation mode')
-    return simulateGeneration(request)
+    return data
   } catch (error) {
-    // Network error - use simulation
-    console.warn('Network error, using simulation mode:', error)
-    return simulateGeneration(request)
+    console.error('[startGeneration] Network error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Network error',
+    }
   }
 }
 
-// Simulation fallback
-function simulateGeneration(request: GenerationRequest): GenerationResponse {
-  const videoId = generateId()
-  const conversationId = request.conversationId || generateId()
-
-  simulatedJobs.set(videoId, {
-    status: 'pending',
-    prompt: request.prompt,
-    model: request.model,
-    duration: request.duration,
-    startedAt: Date.now(),
-  })
-
-  // Process in background
-  processSimulatedJob(videoId, request.duration)
-
-  return {
-    success: true,
-    videoId,
-    conversationId,
-    estimatedTime: getEstimatedTime(request.model),
-    creditsRemaining: 100 - request.duration,
-  }
-}
 
 // Check generation status
 export async function checkGenerationStatus(videoId: string): Promise<VideoStatusResponse> {
-  // Check simulated jobs first (for client-side simulation)
-  const simJob = simulatedJobs.get(videoId)
-  if (simJob) {
-    return {
-      id: videoId,
-      status: simJob.status,
-      videoUrl: simJob.videoUrl || null,
-      thumbnailUrl: simJob.thumbnailUrl || null,
-      qualityScore: simJob.qualityScore || null,
-      model: simJob.model,
-      duration: simJob.duration,
-      prompt: simJob.prompt,
-      createdAt: new Date(simJob.startedAt).toISOString(),
-      completedAt: simJob.completedAt ? new Date(simJob.completedAt).toISOString() : null,
-    }
-  }
-
   try {
     const response = await fetch(`/api/generate?videoId=${videoId}`)
-    if (response.ok) {
-      return response.json()
+    const data = await response.json()
+
+    if (!response.ok) {
+      console.error('[checkGenerationStatus] API error:', response.status, data)
     }
-    throw new Error('API error')
-  } catch {
+
+    return data
+  } catch (error) {
+    console.error('[checkGenerationStatus] Network error:', error)
     return {
       id: videoId,
       status: 'failed',
@@ -161,52 +100,11 @@ export async function checkGenerationStatus(videoId: string): Promise<VideoStatu
       duration: 5,
       createdAt: new Date().toISOString(),
       completedAt: null,
-      error: 'Failed to check status',
+      error: error instanceof Error ? error.message : 'Network error',
     }
   }
 }
 
-// Process a simulated job
-function processSimulatedJob(videoId: string, duration: number) {
-  const job = simulatedJobs.get(videoId)
-  if (!job) return
-
-  // Move to processing after 1 second
-  setTimeout(() => {
-    const j = simulatedJobs.get(videoId)
-    if (j) {
-      j.status = 'processing'
-      simulatedJobs.set(videoId, j)
-    }
-  }, 1000)
-
-  // Complete after simulated generation time
-  const genTime = Math.min(duration * 1000, 8000) // Max 8 seconds in simulation
-  setTimeout(() => {
-    const j = simulatedJobs.get(videoId)
-    if (j) {
-      const randomIndex = Math.floor(Math.random() * SAMPLE_VIDEOS.length)
-      j.status = 'completed'
-      j.completedAt = Date.now()
-      j.videoUrl = SAMPLE_VIDEOS[randomIndex]
-      j.thumbnailUrl = SAMPLE_THUMBNAILS[randomIndex % SAMPLE_THUMBNAILS.length]
-      j.qualityScore = 7 + Math.random() * 3
-      simulatedJobs.set(videoId, j)
-    }
-  }, genTime + 2000)
-}
-
-function getEstimatedTime(model: VideoModel): string {
-  const times: Record<VideoModel, string> = {
-    veo3_1: '45-60s',
-    runway: '30-45s',
-    luma: '5-10s',
-    sora: '30-60s',
-    odyssey: '20-40s',
-    world_labs: '30-45s',
-  }
-  return times[model] || '30-60s'
-}
 
 // YouTube search
 export async function searchYouTube(query: string): Promise<{
@@ -222,18 +120,13 @@ export async function searchYouTube(query: string): Promise<{
     if (response.ok) {
       return response.json()
     }
-  } catch {
-    // Fall through to simulation
+    console.warn('[searchYouTube] API error:', response.status)
+  } catch (error) {
+    console.warn('[searchYouTube] Network error:', error)
   }
 
-  // Simulation fallback
-  return {
-    videos: [
-      { id: '1', title: `${query} - Result 1`, thumbnail: SAMPLE_THUMBNAILS[0], channel: 'Demo Channel' },
-      { id: '2', title: `${query} - Result 2`, thumbnail: SAMPLE_THUMBNAILS[1], channel: 'Demo Channel' },
-      { id: '3', title: `${query} - Result 3`, thumbnail: SAMPLE_THUMBNAILS[2], channel: 'Demo Channel' },
-    ],
-  }
+  // Return empty results on error - no simulation fallback
+  return { videos: [] }
 }
 
 // Poll for video completion
