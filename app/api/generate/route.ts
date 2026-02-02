@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { prisma } from '@/lib/prisma'
 import { generateVideo, checkGenerationStatus as checkModelStatus, MODEL_INFO, VideoModelId } from '@/lib/models'
 import { checkRateLimit } from '@/lib/queue'
 import { generateId, isValidDuration, parseCharacterMentions } from '@/lib/utils'
@@ -72,6 +72,8 @@ export async function POST(request: NextRequest) {
         data: {
           id: userId,
           email: `user-${userId.slice(0, 8)}@premiere.app`, // Placeholder email
+          name: `User ${userId.slice(0, 8)}`, // Required field
+          googleId: `auto-${userId}`, // Required unique field for auto-created users
           credits: 0, // Credits not used - unlimited generations
         },
       })
@@ -107,13 +109,13 @@ export async function POST(request: NextRequest) {
           model: model as VideoModelId,
           duration,
           status: 'pending',
-          styleReferenceUrls: JSON.stringify(styleReferenceUrls || []) as any,
-          characterIds: JSON.stringify(characterIds || []) as any,
+          styleReferenceUrls: JSON.stringify(styleReferenceUrls || []),
+          characterIds: JSON.stringify(characterIds || []),
           metadata: JSON.stringify({
             mentionedCharacters,
             styleReferences: styleReferences || [],
             requestedAt: new Date().toISOString(),
-          }) as any,
+          }),
         },
       })
       console.log(`[Generate] Video record created successfully: ${videoId}`)

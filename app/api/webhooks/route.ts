@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma, Video } from '@/lib/db'
+import { prisma } from '@/lib/prisma'
+import { Video } from '@prisma/client'
 import { enqueueQualityCheck } from '@/lib/queue'
 import { generateId } from '@/lib/utils'
 
