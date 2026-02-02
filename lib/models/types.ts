@@ -68,34 +68,35 @@ export interface VideoModel {
 }
 
 // Model metadata for UI
+// Note: 'name' is display name for UI, actual API model names are in model files
 export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'checkStatus'>> = {
   veo3_1: {
     id: 'veo3_1',
-    name: 'Google Veo 3.1',
-    maxDuration: 30,
-    supportedInputs: ['text', 'image', 'video'],
+    name: 'Veo 3.1',  // API model: veo-3.1-generate-preview
+    maxDuration: 8,   // Per generation, can extend up to 148s
+    supportedInputs: ['text', 'image'],
     estimatedTime: '45-60s',
     costPer10Seconds: 0.5,
   },
   runway: {
     id: 'runway',
-    name: 'Runway Gen-3',
-    maxDuration: 18,
-    supportedInputs: ['text', 'image'],
+    name: 'Runway',  // API models: gen4_turbo (image), gen4_aleph (video), veo3.1 (text)
+    maxDuration: 10,
+    supportedInputs: ['text', 'image', 'video'],
     estimatedTime: '30-45s',
     costPer10Seconds: 0.5,
   },
   luma: {
     id: 'luma',
-    name: 'Luma AI',
+    name: 'Luma',  // API model: ray-flash-2
     maxDuration: 5,
-    supportedInputs: ['text'],
-    estimatedTime: '5-10s',
+    supportedInputs: ['text', 'image'],
+    estimatedTime: '20-40s',
     costPer10Seconds: 2.0,
   },
   sora: {
     id: 'sora',
-    name: 'OpenAI Sora',
+    name: 'Sora',  // Not yet implemented
     maxDuration: 60,
     supportedInputs: ['text'],
     estimatedTime: '30-60s',
@@ -103,7 +104,7 @@ export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'che
   },
   odyssey: {
     id: 'odyssey',
-    name: 'Odyssey',
+    name: 'Odyssey',  // Not yet implemented
     maxDuration: 30,
     supportedInputs: ['text', 'image'],
     estimatedTime: '20-40s',
@@ -111,7 +112,7 @@ export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'che
   },
   world_labs: {
     id: 'world_labs',
-    name: 'World Labs',
+    name: 'World Labs',  // Not yet implemented
     maxDuration: 10,
     supportedInputs: ['text'],
     estimatedTime: '30-45s',
