@@ -95,24 +95,35 @@ export async function POST(request: NextRequest) {
 
     // Create video record
     const videoId = generateId()
-    await prisma.video.create({
-      data: {
-        id: videoId,
-        conversationId: convId,
-        userId,
-        prompt,
-        model: model as VideoModelId,
-        duration,
-        status: 'pending',
-        styleReferenceUrls: styleReferenceUrls || [],
-        characterIds: characterIds || [],
-        metadata: {
-          mentionedCharacters,
-          styleReferences: styleReferences || [],
-          requestedAt: new Date().toISOString(),
+    console.log(`[Generate] Creating video with ID: ${videoId}`)
+
+    try {
+      await prisma.video.create({
+        data: {
+          id: videoId,
+          conversationId: convId,
+          userId,
+          prompt,
+          model: model as VideoModelId,
+          duration,
+          status: 'pending',
+          styleReferenceUrls: JSON.stringify(styleReferenceUrls || []),
+          characterIds: JSON.stringify(characterIds || []),
+          metadata: JSON.stringify({
+            mentionedCharacters,
+            styleReferences: styleReferences || [],
+            requestedAt: new Date().toISOString(),
+          }),
         },
-      },
-    })
+      })
+      console.log(`[Generate] Video record created successfully: ${videoId}`)
+    } catch (dbError) {
+      console.error(`[Generate] Failed to create video record:`, dbError)
+      return NextResponse.json(
+        { error: 'Failed to create video record in database' },
+        { status: 500 }
+      )
+    }
 
     // Determine the primary style reference (image or video URL)
     // styleReferences contains typed references: { type: 'youtube' | 'upload' | 'url', url, title? }
@@ -206,15 +217,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing videoId parameter' }, { status: 400 })
   }
 
+  console.log(`[Status] Checking status for video: ${videoId}`)
+
   try {
-    // Get from mock database first
+    // Get from database first
     const video = await prisma.video.findUnique({
       where: { id: videoId },
     })
 
     if (!video) {
+      console.error(`[Status] Video not found in database: ${videoId}`)
       return NextResponse.json({ error: 'Video not found' }, { status: 404 })
     }
+
+    console.log(`[Status] Found video: ${videoId}, status: ${(video as { status: string }).status}`)
 
     // Check if we have an active job for this video
     const activeJob = activeJobs.get(videoId)
