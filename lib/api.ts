@@ -30,6 +30,7 @@ export interface GenerationResponse {
   estimatedTime?: string
   creditsRemaining?: number
   error?: string
+  warning?: string
 }
 
 export interface VideoStatusResponse {

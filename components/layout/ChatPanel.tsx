@@ -174,6 +174,18 @@ export function ChatPanel() {
         throw new Error(response.error || 'Failed to start generation')
       }
 
+      // Show warning if model API had issues
+      if (response.warning) {
+        const warningContent = `Warning: ${response.warning}`
+        addMessage(convId, {
+          id: generateId(),
+          role: 'assistant' as const,
+          content: warningContent,
+          timestamp: new Date(),
+        })
+        createMessageApi(convId, 'assistant', warningContent)
+      }
+
       // Create video entry
       const video = {
         id: response.videoId,
