@@ -31,30 +31,49 @@ export interface GenerationStatus {
 }
 
 export interface QualityReport {
-  overallScore: number // 0-10
+  overallScore: number // 0-10, harsh scoring
   dimensions: {
-    accuracy: number
-    facialQuality: number
-    objectCoherence: number
-    lightingConsistency: number
-    motionSmoothness: number
+    promptAccuracy: number      // How well video matches the prompt
+    anatomicalAccuracy: number  // Correctness of human body/face proportions
+    physicsRealism: number      // Realistic physics and motion
+    temporalConsistency: number // Consistency across frames
+    visualQuality: number       // Resolution, clarity, artifacts
   }
   issues: QualityIssue[]
-  biasFlags: BiasFlag[]
+  risks: RiskFlag[]
+  characterComparison?: CharacterComparison
+  summary: string // Brief text summary of evaluation
 }
 
 export interface QualityIssue {
-  type: 'distortion' | 'artifact' | 'inconsistency' | 'blur' | 'flickering'
-  severity: 'low' | 'medium' | 'high'
+  type: 'anatomical_error' | 'physics_violation' | 'temporal_glitch' | 'artifact' | 'blur' | 'flickering' | 'uncanny_valley' | 'distortion'
+  severity: 'low' | 'medium' | 'high' | 'critical'
   timestamp?: number
   description: string
 }
 
-export interface BiasFlag {
-  type: 'gender' | 'racial' | 'age' | 'other'
+export interface RiskFlag {
+  type: 'violence' | 'inappropriate' | 'bias_gender' | 'bias_racial' | 'bias_age' | 'lack_diversity' | 'stereotyping' | 'misinformation' | 'other'
+  severity: 'low' | 'medium' | 'high' | 'critical'
   description: string
-  severity: 'low' | 'medium' | 'high'
+  recommendation?: string
 }
+
+export interface CharacterComparison {
+  matchScore: number // 0-10, how well generated character matches reference
+  referenceProvided: boolean
+  differences: CharacterDifference[]
+  overallAssessment: string
+}
+
+export interface CharacterDifference {
+  aspect: 'face' | 'body' | 'clothing' | 'pose' | 'skin_tone' | 'hair' | 'age_appearance' | 'gender_presentation' | 'other'
+  severity: 'minor' | 'moderate' | 'significant'
+  description: string
+}
+
+// Legacy type alias for backwards compatibility
+export interface BiasFlag extends RiskFlag {}
 
 export interface VideoModel {
   id: VideoModelId

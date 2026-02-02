@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { Video } from '@prisma/client'
 import { enqueueQualityCheck } from '@/lib/queue'
 import { generateId } from '@/lib/utils'
 
@@ -69,7 +68,7 @@ async function handleWebhook(
     return NextResponse.json({ received: true })
   }
 
-  const videoData = video as Video
+  const videoData = video
 
   // Determine video URL from various possible fields
   const videoUrl = data.videoUrl || data.video_url || data.video?.url || data.output?.video_url

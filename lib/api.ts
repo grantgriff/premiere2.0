@@ -163,11 +163,11 @@ export interface VerifyResponse {
   report: {
     overallScore: number
     dimensions: {
-      accuracy: number
-      facialQuality: number
-      objectCoherence: number
-      lightingConsistency: number
-      motionSmoothness: number
+      promptAccuracy: number
+      anatomicalAccuracy: number
+      physicsRealism: number
+      temporalConsistency: number
+      visualQuality: number
     }
     issues: Array<{
       type: string
@@ -175,11 +175,13 @@ export interface VerifyResponse {
       timestamp?: number
       description: string
     }>
-    biasFlags: Array<{
+    risks: Array<{
       type: string
       severity: string
       description: string
+      recommendation?: string
     }>
+    summary: string
   }
   hasHighSeverityIssues: boolean
   highSeverityIssues?: Array<{ type: string; severity: string; description: string }>
@@ -214,11 +216,11 @@ function simulateVerification(): VerifyResponse {
     report: {
       overallScore: score,
       dimensions: {
-        accuracy: 5 + Math.random() * 5,
-        facialQuality: 5 + Math.random() * 5,
-        objectCoherence: 6 + Math.random() * 4,
-        lightingConsistency: 6 + Math.random() * 4,
-        motionSmoothness: 5 + Math.random() * 5,
+        promptAccuracy: 5 + Math.random() * 5,
+        anatomicalAccuracy: 5 + Math.random() * 5,
+        physicsRealism: 6 + Math.random() * 4,
+        temporalConsistency: 6 + Math.random() * 4,
+        visualQuality: 5 + Math.random() * 5,
       },
       issues: score < 7 ? [
         {
@@ -227,7 +229,10 @@ function simulateVerification(): VerifyResponse {
           description: 'Minor compression artifacts detected',
         },
       ] : [],
-      biasFlags: [],
+      risks: [],
+      summary: score >= 8 ? 'Excellent video quality with no significant issues.' :
+               score >= 6 ? 'Good video quality with minor issues.' :
+               'Video has some quality concerns that may need attention.',
     },
     hasHighSeverityIssues: false,
   }
