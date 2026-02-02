@@ -119,11 +119,11 @@ export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'che
   },
   sora: {
     id: 'sora',
-    name: 'Sora',  // API model: sora-2-2025-12-08
-    maxDuration: 20,
-    allowedDurations: [5, 10, 15, 20], // Flexible
+    name: 'Sora',  // API model: sora-2
+    maxDuration: 12,
+    allowedDurations: [4, 8, 12], // Sora only allows 4, 8, or 12 seconds
     supportedInputs: ['text', 'image'],
-    estimatedTime: '45-90s',
+    estimatedTime: '60-120s',
     costPer10Seconds: 1.0,
   },
   odyssey: {

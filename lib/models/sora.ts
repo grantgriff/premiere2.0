@@ -3,32 +3,22 @@
 import { GenerationParams, GenerationResult, GenerationStatus } from './types'
 
 const OPENAI_API_BASE = 'https://api.openai.com/v1'
-const SORA_MODEL = 'sora-2-2025-12-08'
+const SORA_MODEL = 'sora-2'
 
 interface SoraGenerationResponse {
   id: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'queued' | 'in_progress' | 'completed' | 'failed'
   created_at: number
 }
 
 interface SoraStatusResponse {
   id: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'queued' | 'in_progress' | 'completed' | 'failed'
   created_at: number
-  output?: {
-    video_url: string
-    thumbnail_url?: string
-  }
+  output_url?: string
   error?: {
     message: string
     code?: string
-  }
-}
-
-function getHeaders(apiKey: string): HeadersInit {
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${apiKey}`,
   }
 }
 
@@ -50,28 +40,32 @@ export async function generateWithSora(params: GenerationParams): Promise<Genera
   }
 
   try {
-    // Map aspect ratio to Sora format
-    const aspectRatio = mapAspectRatio(params.aspectRatio || '16:9')
+    // Map duration to allowed Sora values (4, 8, or 12 seconds)
+    const seconds = mapToSoraDuration(params.duration)
 
-    // Build request body
-    const requestBody: Record<string, unknown> = {
+    // Map aspect ratio to Sora resolution
+    const size = mapAspectRatioToSize(params.aspectRatio || '16:9')
+
+    // Build multipart form data
+    const formData = new FormData()
+    formData.append('model', SORA_MODEL)
+    formData.append('prompt', params.prompt)
+    formData.append('seconds', seconds.toString())
+    formData.append('size', size)
+
+    console.log('[Sora] Request:', {
       model: SORA_MODEL,
       prompt: params.prompt,
-      duration: Math.min(params.duration, 20), // Sora max is typically 20s per generation
-      aspect_ratio: aspectRatio,
-    }
+      seconds,
+      size,
+    })
 
-    // Add image input if provided (for image-to-video)
-    if (params.styleReferenceUrl && isImageUrl(params.styleReferenceUrl)) {
-      requestBody.image = params.styleReferenceUrl
-    }
-
-    console.log('[Sora] Request:', JSON.stringify(requestBody, null, 2))
-
-    const response = await fetch(`${OPENAI_API_BASE}/videos/generations`, {
+    const response = await fetch(`${OPENAI_API_BASE}/videos`, {
       method: 'POST',
-      headers: getHeaders(apiKey),
-      body: JSON.stringify(requestBody),
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: formData,
     })
 
     if (!response.ok) {
@@ -113,7 +107,7 @@ export async function generateWithSora(params: GenerationParams): Promise<Genera
     return {
       success: true,
       jobId: data.id,
-      estimatedTime: params.duration <= 10 ? 45 : 90,
+      estimatedTime: seconds <= 8 ? 60 : 120,
     }
   } catch (error) {
     console.error('[Sora] Generation error:', error)
@@ -131,9 +125,11 @@ export async function checkSoraStatus(generationId: string): Promise<GenerationS
   }
 
   try {
-    const response = await fetch(`${OPENAI_API_BASE}/videos/generations/${generationId}`, {
+    const response = await fetch(`${OPENAI_API_BASE}/videos/${generationId}`, {
       method: 'GET',
-      headers: getHeaders(apiKey),
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
     })
 
     if (!response.ok) {
@@ -150,19 +146,33 @@ export async function checkSoraStatus(generationId: string): Promise<GenerationS
 
     switch (data.status) {
       case 'completed':
+        // The video URL is in output_url, but we may need to fetch the content endpoint
+        let videoUrl = data.output_url
+        if (!videoUrl) {
+          // Try fetching from the content endpoint
+          const contentResponse = await fetch(`${OPENAI_API_BASE}/videos/${generationId}/content`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+            },
+          })
+          if (contentResponse.ok) {
+            // The content endpoint may redirect to or return the video URL
+            videoUrl = contentResponse.url
+          }
+        }
         return {
           status: 'completed',
-          videoUrl: data.output?.video_url,
-          thumbnailUrl: data.output?.thumbnail_url,
+          videoUrl,
         }
       case 'failed':
         return {
           status: 'failed',
           error: data.error?.message || 'Generation failed',
         }
-      case 'running':
+      case 'in_progress':
         return { status: 'processing' }
-      case 'pending':
+      case 'queued':
       default:
         return { status: 'pending' }
     }
@@ -175,24 +185,24 @@ export async function checkSoraStatus(generationId: string): Promise<GenerationS
   }
 }
 
-// Helper: Map aspect ratio to Sora format
-function mapAspectRatio(ratio: string): string {
-  const ratioMap: Record<string, string> = {
-    '16:9': '16:9',
-    '9:16': '9:16',
-    '1:1': '1:1',
-    '4:3': '4:3',
-    '3:4': '3:4',
-    '21:9': '21:9',
-  }
-  return ratioMap[ratio] || '16:9'
+// Helper: Map duration to Sora allowed values (4, 8, or 12 seconds)
+function mapToSoraDuration(duration: number): number {
+  if (duration <= 4) return 4
+  if (duration <= 8) return 8
+  return 12
 }
 
-// Helper: Check if URL is likely an image
-function isImageUrl(url: string): boolean {
-  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
-  const lowerUrl = url.toLowerCase()
-  return imageExtensions.some(ext => lowerUrl.includes(ext)) ||
-         lowerUrl.includes('image') ||
-         (!lowerUrl.includes('video') && !lowerUrl.includes('.mp4') && !lowerUrl.includes('.mov'))
+// Helper: Map aspect ratio to Sora resolution size
+function mapAspectRatioToSize(ratio: string): string {
+  // Sora allowed sizes: 720x1280, 1280x720, 1024x1792, 1792x1024
+  const sizeMap: Record<string, string> = {
+    '16:9': '1280x720',   // Landscape
+    '9:16': '720x1280',   // Portrait
+    '1:1': '1280x720',    // Default to landscape for square (Sora doesn't support 1:1)
+    '4:3': '1280x720',    // Closest landscape
+    '3:4': '720x1280',    // Closest portrait
+    '21:9': '1792x1024',  // Ultra-wide landscape
+    '9:21': '1024x1792',  // Ultra-tall portrait
+  }
+  return sizeMap[ratio] || '1280x720'
 }
