@@ -16,7 +16,6 @@ export interface GenerationRequest {
   prompt: string
   model: VideoModel
   duration: number
-  userId: string
   conversationId?: string
   styleReferenceUrls?: string[]
   styleReferences?: StyleReference[]
@@ -294,12 +293,12 @@ export async function fetchConversationDetails(conversationId: string, userId: s
 }
 
 // Create a new conversation
-export async function createConversation(userId: string, title?: string): Promise<ConversationResponse | null> {
+export async function createConversation(title?: string): Promise<ConversationResponse | null> {
   try {
     const response = await fetch('/api/conversations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, title }),
+      body: JSON.stringify({ title }),
     })
     if (response.ok) {
       const data = await response.json()

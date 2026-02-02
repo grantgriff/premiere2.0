@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { generateVideo, checkGenerationStatus as checkModelStatus, MODEL_INFO, VideoModelId } from '@/lib/models'
 import { checkRateLimit } from '@/lib/queue'
 import { generateId, isValidDuration, parseCharacterMentions } from '@/lib/utils'
+import { createServerClient } from '@/lib/supabase-server'
 
 // Store active generation jobs for status polling
 // Maps internal videoId to external model job info
@@ -18,14 +19,27 @@ const activeJobs = new Map<string, {
 
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user from session
+    const supabase = await createServerClient()
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !authUser) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please log in to generate videos.' },
+        { status: 401 }
+      )
+    }
+
+    const userId = authUser.id
+
     const body = await request.json()
-    const { prompt, model, duration, conversationId, userId, styleReferenceUrls, styleReferences, characterIds } =
+    const { prompt, model, duration, conversationId, styleReferenceUrls, styleReferences, characterIds } =
       body
 
     // Validate required fields
-    if (!prompt || !model || !duration || !userId) {
+    if (!prompt || !model || !duration) {
       return NextResponse.json(
-        { error: 'Missing required fields: prompt, model, duration, userId' },
+        { error: 'Missing required fields: prompt, model, duration' },
         { status: 400 }
       )
     }
@@ -67,17 +81,24 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
-      // Auto-create user record
+      // Auto-create user record from authenticated session
+      // This happens on first video generation after Google OAuth login
+      const userMetadata = authUser.user_metadata || {}
+      const googleId = authUser.app_metadata?.provider === 'google'
+        ? authUser.user_metadata?.provider_id || authUser.id
+        : authUser.id
+
       await prisma.user.create({
         data: {
           id: userId,
-          email: `user-${userId.slice(0, 8)}@premiere.app`, // Placeholder email
-          name: `User ${userId.slice(0, 8)}`, // Required field
-          googleId: `auto-${userId}`, // Required unique field for auto-created users
+          email: authUser.email || `user-${userId.slice(0, 8)}@premiere.app`,
+          name: userMetadata.full_name || userMetadata.name || `User ${userId.slice(0, 8)}`,
+          googleId: googleId,
+          avatarUrl: userMetadata.avatar_url || userMetadata.picture || null,
           credits: 0, // Credits not used - unlimited generations
         },
       })
-      console.log(`[Generate] Created new user record for ${userId}`)
+      console.log(`[Generate] Created user record for ${authUser.email}`)
     }
 
     // Get or create conversation
