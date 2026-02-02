@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
         conversationId: convId,
         role: 'user',
         content: prompt,
-        mediaUrls: styleReferenceUrls || [],
+        mediaUrls: JSON.stringify(styleReferenceUrls || []),
       },
     })
 
