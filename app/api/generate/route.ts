@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateVideo, checkGenerationStatus as checkModelStatus, MODEL_INFO, VideoModelId } from '@/lib/models'
 import { checkRateLimit } from '@/lib/queue'
-import { generateId, isValidDuration, parseCharacterMentions } from '@/lib/utils'
+import { generateId, parseCharacterMentions } from '@/lib/utils'
 import { createServerClient } from '@/lib/supabase-server'
 
 // Store active generation jobs for status polling
@@ -49,19 +49,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid model specified' }, { status: 400 })
     }
 
-    // Validate duration
-    if (!isValidDuration(duration)) {
-      return NextResponse.json(
-        { error: 'Invalid duration. Must be 1, 3, 5, 10, 15, or 30 seconds' },
-        { status: 400 }
-      )
-    }
-
-    // Check duration against model limit
+    // Get model info for validation
     const modelInfo = MODEL_INFO[model as VideoModelId]
-    if (duration > modelInfo.maxDuration) {
+
+    // Validate duration against model-specific allowed durations
+    if (!modelInfo.allowedDurations.includes(duration)) {
       return NextResponse.json(
-        { error: `Duration exceeds ${modelInfo.name} limit of ${modelInfo.maxDuration}s` },
+        { error: `Invalid duration for ${modelInfo.name}. Allowed: ${modelInfo.allowedDurations.join(', ')} seconds` },
         { status: 400 }
       )
     }
