@@ -164,13 +164,34 @@ export async function POST(request: NextRequest) {
     // Actually call the video generation API
     console.log(`[Generate] Starting ${model} generation for video ${videoId}`)
     console.log(`[Generate] Style reference: ${primaryStyleUrl || 'none'}`)
+    console.log(`[Generate] Generation params:`, { prompt, duration, aspectRatio: '16:9', model })
 
-    const genResult = await generateVideo(model as VideoModelId, {
-      prompt,
-      duration,
-      aspectRatio: '16:9',
-      styleReferenceUrl: primaryStyleUrl,
-    })
+    let genResult
+    try {
+      genResult = await generateVideo(model as VideoModelId, {
+        prompt,
+        duration,
+        aspectRatio: '16:9',
+        styleReferenceUrl: primaryStyleUrl,
+      })
+      console.log(`[Generate] Video generation result:`, genResult)
+    } catch (genError) {
+      console.error(`[Generate] Video generation threw error:`, genError)
+      console.error(`[Generate] Error stack:`, genError instanceof Error ? genError.stack : 'No stack')
+
+      // Update video status to failed
+      await prisma.video.update({
+        where: { id: videoId },
+        data: { status: 'failed' },
+      })
+
+      return NextResponse.json({
+        success: false,
+        error: `Failed to start generation: ${genError instanceof Error ? genError.message : 'Unknown error'}`,
+        videoId,
+        conversationId: convId,
+      })
+    }
 
     if (!genResult.success || !genResult.jobId) {
       // Model API failed - update status and return error
