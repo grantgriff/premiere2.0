@@ -2,7 +2,7 @@
 // Docs: https://docs.dev.runwayml.com/
 import { GenerationParams, GenerationResult, GenerationStatus } from './types'
 
-const RUNWAY_API_BASE = 'https://api.runwayml.com/v1'
+const RUNWAY_API_BASE = 'https://api.dev.runwayml.com/v1'
 const RUNWAY_API_VERSION = '2024-11-06'
 
 // Models for different input types

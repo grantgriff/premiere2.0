@@ -139,30 +139,20 @@ export async function POST(request: NextRequest) {
     })
 
     if (!genResult.success || !genResult.jobId) {
-      // Model API failed - update status and return error but still return videoId
-      // so client can track the failure
+      // Model API failed - update status and return error
       await prisma.video.update({
         where: { id: videoId },
         data: { status: 'failed' },
       })
 
-      activeJobs.set(videoId, {
-        model: model as VideoModelId,
-        externalJobId: '',
-        status: 'failed',
-        error: genResult.error || 'Model API failed to start generation',
-        startedAt: Date.now(),
-      })
-
       console.log(`[Generate] Failed to start: ${genResult.error}`)
 
-      // Still return success so client can poll for status
+      // Return failure so client shows error immediately (no polling)
       return NextResponse.json({
-        success: true,
+        success: false,
+        error: genResult.error || 'Failed to start video generation',
         videoId,
         conversationId: convId,
-        estimatedTime: modelInfo.estimatedTime,
-        warning: genResult.error,
       })
     }
 
