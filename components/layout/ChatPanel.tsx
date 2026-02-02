@@ -94,8 +94,8 @@ export function ChatPanel() {
     if (!convId) {
       const title = prompt.slice(0, 40) + (prompt.length > 40 ? '...' : '')
 
-      // Create in database first
-      const dbConversation = await createConversationApi(user.id, title)
+      // Create in database first (userId extracted from session on server)
+      const dbConversation = await createConversationApi(title)
 
       const newConv = {
         id: dbConversation?.id || generateId(),
@@ -161,11 +161,11 @@ export function ChatPanel() {
       ]
 
       // Start generation with all references
+      // Note: userId is now extracted from session cookie on the server
       const response = await startGeneration({
         prompt,
         model: selectedModel,
         duration: selectedDuration,
-        userId: user.id,
         conversationId: convId,
         styleReferences,
       })
