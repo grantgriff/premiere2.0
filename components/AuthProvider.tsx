@@ -87,7 +87,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: user.name || 'User',
         email: user.email || '',
         avatarUrl: user.avatarUrl || null,
-        credits: 100, // This should ideally come from the database
       })
 
       // Load conversations

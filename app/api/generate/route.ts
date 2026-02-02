@@ -61,16 +61,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check user credits
+    // Ensure user record exists (needed for database relationships)
     const user = await prisma.user.findUnique({
       where: { id: userId },
     })
 
-    if (!user || (user as { credits: number }).credits < duration) {
-      return NextResponse.json(
-        { error: 'Insufficient credits for this generation' },
-        { status: 402 }
-      )
+    if (!user) {
+      // Auto-create user record
+      await prisma.user.create({
+        data: {
+          id: userId,
+          email: `user-${userId.slice(0, 8)}@premiere.app`, // Placeholder email
+          credits: 0, // Credits not used - unlimited generations
+        },
+      })
+      console.log(`[Generate] Created new user record for ${userId}`)
     }
 
     // Get or create conversation
@@ -157,7 +162,6 @@ export async function POST(request: NextRequest) {
         videoId,
         conversationId: convId,
         estimatedTime: modelInfo.estimatedTime,
-        creditsRemaining: (user as { credits: number }).credits - duration,
         warning: genResult.error,
       })
     }
@@ -174,12 +178,6 @@ export async function POST(request: NextRequest) {
     await prisma.video.update({
       where: { id: videoId },
       data: { status: 'processing' },
-    })
-
-    // Deduct credits
-    await prisma.user.update({
-      where: { id: userId },
-      data: { credits: { decrement: duration } },
     })
 
     // Create user message in conversation
@@ -199,7 +197,6 @@ export async function POST(request: NextRequest) {
       videoId,
       conversationId: convId,
       estimatedTime: modelInfo.estimatedTime,
-      creditsRemaining: (user as { credits: number }).credits - duration,
     })
   } catch (error) {
     console.error('Generation error:', error)

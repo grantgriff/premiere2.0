@@ -187,7 +187,11 @@ const MODEL_COLORS: Record<VideoModel, string> = {
 
 export function AnalyticsDashboard() {
   const analytics = useAnalytics()
-  const user = useAppStore((state) => state.user)
+
+  // Calculate average duration per video
+  const avgDuration = analytics.totalVideos > 0
+    ? analytics.totalDuration / analytics.totalVideos
+    : 0
 
   // Prepare model usage data for chart
   const modelUsageData = Object.entries(analytics.modelUsage)
@@ -249,9 +253,9 @@ export function AnalyticsDashboard() {
           color="green"
         />
         <StatsCard
-          title="Credits"
-          value={user?.credits ?? 0}
-          subtitle="Remaining balance"
+          title="Avg Duration"
+          value={`${avgDuration.toFixed(1)}s`}
+          subtitle="Per video"
           icon={<Zap className="w-5 h-5" />}
           color="yellow"
         />
