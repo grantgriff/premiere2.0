@@ -24,6 +24,16 @@ interface LumaGenerateResponse {
   version?: string
 }
 
+// Valid Luma durations: "5s", "9s", "10s"
+const VALID_LUMA_DURATIONS = [5, 9, 10]
+
+function mapToLumaDuration(duration: number): string {
+  // Find the closest valid duration
+  if (duration <= 5) return '5s'
+  if (duration <= 9) return '9s'
+  return '10s'
+}
+
 export async function generateWithLuma(params: GenerationParams): Promise<GenerationResult> {
   const apiKey = process.env.LUMA_API_KEY
   if (!apiKey) {
@@ -31,13 +41,16 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
   }
 
   try {
+    // Map duration to valid Luma format
+    const lumaDuration = mapToLumaDuration(params.duration || 5)
+
     // Build request body matching exact API spec
     const body: Record<string, unknown> = {
       model: LUMA_MODEL,
       prompt: params.prompt,
       aspect_ratio: params.aspectRatio || '16:9',
       resolution: '720p',
-      duration: `${params.duration || 5}s`,
+      duration: lumaDuration,
       loop: false,
     }
 
@@ -51,10 +64,10 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
       }
     }
 
-    console.log('[Luma] Request URL:', `${LUMA_API_BASE}/generations`)
+    console.log('[Luma] Request URL:', `${LUMA_API_BASE}/generations/video`)
     console.log('[Luma] Request body:', JSON.stringify(body, null, 2))
 
-    const response = await fetch(`${LUMA_API_BASE}/generations`, {
+    const response = await fetch(`${LUMA_API_BASE}/generations/video`, {
       method: 'POST',
       headers: {
         'accept': 'application/json',

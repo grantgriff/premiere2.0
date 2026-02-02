@@ -14,7 +14,7 @@ import {
 import { useAppStore, useActiveConversation, VideoModel } from '@/lib/store'
 import { startGeneration, pollVideoStatus, verifyVideoQuality, VideoStatusResponse, StyleReference, createConversation as createConversationApi, createMessage as createMessageApi } from '@/lib/api'
 import { generateId } from '@/lib/utils'
-import { QualityReport } from '@/lib/models/types'
+import { QualityReport, MODEL_INFO, VideoModelId } from '@/lib/models/types'
 import { CharacterMention, extractCharacterMentions } from '@/components/ui/CharacterMention'
 import { CharacterManager } from '@/components/ui/CharacterManager'
 import { YouTubeSearchPanel, YouTubeVideo } from '@/components/ui/YouTubeSearchPanel'
@@ -36,7 +36,20 @@ const MODELS: { id: VideoModel; name: string; speed: string; disabled?: boolean 
   { id: 'world_labs', name: 'World Labs', speed: '30-45s', disabled: true },
 ]
 
-const DURATIONS = [1, 3, 5, 10, 15, 30]
+// Get allowed durations for the selected model
+function getModelDurations(modelId: VideoModel): number[] {
+  return MODEL_INFO[modelId as VideoModelId]?.allowedDurations || [5, 10]
+}
+
+// Get supported input types for the selected model
+function getModelSupportedInputs(modelId: VideoModel): ('text' | 'image' | 'video')[] {
+  return MODEL_INFO[modelId as VideoModelId]?.supportedInputs || ['text']
+}
+
+// Check if model supports a specific input type
+function modelSupportsInput(modelId: VideoModel, inputType: 'text' | 'image' | 'video'): boolean {
+  return getModelSupportedInputs(modelId).includes(inputType)
+}
 
 export function ChatPanel() {
   const [input, setInput] = useState('')
@@ -79,6 +92,42 @@ export function ChatPanel() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeConversation?.messages])
+
+  // Auto-select valid duration when model changes
+  useEffect(() => {
+    const allowedDurations = getModelDurations(selectedModel)
+    if (!allowedDurations.includes(selectedDuration)) {
+      // Select the first allowed duration for this model
+      setSelectedDuration(allowedDurations[0])
+    }
+  }, [selectedModel, selectedDuration, setSelectedDuration])
+
+  // Clear invalid uploads when model changes
+  useEffect(() => {
+    const supportsImage = modelSupportsInput(selectedModel, 'image')
+    const supportsVideo = modelSupportsInput(selectedModel, 'video')
+
+    // Remove uploaded files that don't match model's supported inputs
+    setUploadedFiles(prev => {
+      const filtered = prev.filter(file => {
+        if (file.type === 'image' && !supportsImage) {
+          URL.revokeObjectURL(file.previewUrl)
+          return false
+        }
+        if (file.type === 'video' && !supportsVideo) {
+          URL.revokeObjectURL(file.previewUrl)
+          return false
+        }
+        return true
+      })
+      return filtered
+    })
+
+    // Clear YouTube videos if model doesn't support video or image references
+    if (!supportsVideo && !supportsImage) {
+      setSelectedYouTubeVideos([])
+    }
+  }, [selectedModel])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -496,7 +545,7 @@ export function ChatPanel() {
       <div className="px-4 py-3 border-t border-border">
         <label className="text-xs text-foreground-secondary mb-2 block">Duration</label>
         <div className="flex flex-wrap gap-2">
-          {DURATIONS.map((duration) => (
+          {getModelDurations(selectedModel).map((duration) => (
             <button
               key={duration}
               onClick={() => setSelectedDuration(duration)}
@@ -661,33 +710,42 @@ export function ChatPanel() {
             onChange={(e) => handleFileUpload(e, 'video')}
           />
           <div className="absolute bottom-2 right-2 flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => imageInputRef.current?.click()}
-              className={`btn-ghost p-1.5 ${uploadedFiles.some(f => f.type === 'image') ? 'text-accent' : ''}`}
-              title="Upload image reference"
-              disabled={isGenerating || uploadedFiles.length >= 3}
-            >
-              <ImageIcon className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => videoInputRef.current?.click()}
-              className={`btn-ghost p-1.5 ${uploadedFiles.some(f => f.type === 'video') ? 'text-accent' : ''}`}
-              title="Upload video reference"
-              disabled={isGenerating || uploadedFiles.length >= 3}
-            >
-              <Video className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowYouTubeSearch(true)}
-              className={`btn-ghost p-1.5 ${selectedYouTubeVideos.length > 0 ? 'text-red-500' : ''}`}
-              title="Search YouTube for reference"
-              disabled={isGenerating}
-            >
-              <Youtube className="w-4 h-4" />
-            </button>
+            {/* Image upload - only for models that support image input */}
+            {modelSupportsInput(selectedModel, 'image') && (
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className={`btn-ghost p-1.5 ${uploadedFiles.some(f => f.type === 'image') ? 'text-accent' : ''}`}
+                title="Upload image reference"
+                disabled={isGenerating || uploadedFiles.length >= 3}
+              >
+                <ImageIcon className="w-4 h-4" />
+              </button>
+            )}
+            {/* Video upload - only for models that support video input */}
+            {modelSupportsInput(selectedModel, 'video') && (
+              <button
+                type="button"
+                onClick={() => videoInputRef.current?.click()}
+                className={`btn-ghost p-1.5 ${uploadedFiles.some(f => f.type === 'video') ? 'text-accent' : ''}`}
+                title="Upload video reference"
+                disabled={isGenerating || uploadedFiles.length >= 3}
+              >
+                <Video className="w-4 h-4" />
+              </button>
+            )}
+            {/* YouTube search - for models that support video or image (can extract frames) */}
+            {(modelSupportsInput(selectedModel, 'video') || modelSupportsInput(selectedModel, 'image')) && (
+              <button
+                type="button"
+                onClick={() => setShowYouTubeSearch(true)}
+                className={`btn-ghost p-1.5 ${selectedYouTubeVideos.length > 0 ? 'text-red-500' : ''}`}
+                title="Search YouTube for reference"
+                disabled={isGenerating}
+              >
+                <Youtube className="w-4 h-4" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowCharacterManager(true)}

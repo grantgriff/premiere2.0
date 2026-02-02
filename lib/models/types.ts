@@ -79,6 +79,7 @@ export interface VideoModel {
   id: VideoModelId
   name: string
   maxDuration: number
+  allowedDurations: number[] // Specific durations allowed by the API
   supportedInputs: ('text' | 'image' | 'video')[]
   estimatedTime: string
   costPer10Seconds: number
@@ -92,7 +93,8 @@ export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'che
   veo3_1: {
     id: 'veo3_1',
     name: 'Veo 3.1',  // API model: veo-3.1-generate-preview
-    maxDuration: 8,   // Per generation, can extend up to 148s
+    maxDuration: 8,
+    allowedDurations: [4, 6, 8], // Veo only accepts these values
     supportedInputs: ['text', 'image'],
     estimatedTime: '45-60s',
     costPer10Seconds: 0.5,
@@ -101,6 +103,7 @@ export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'che
     id: 'runway',
     name: 'Runway',  // API models: gen4_turbo (image), gen4_aleph (video), veo3.1 (text)
     maxDuration: 10,
+    allowedDurations: [4, 6, 8, 10], // Text: 4,6,8 | Image: 2-10
     supportedInputs: ['text', 'image', 'video'],
     estimatedTime: '30-45s',
     costPer10Seconds: 0.5,
@@ -108,8 +111,9 @@ export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'che
   luma: {
     id: 'luma',
     name: 'Luma',  // API model: ray-flash-2
-    maxDuration: 5,
-    supportedInputs: ['text', 'image'],
+    maxDuration: 10,
+    allowedDurations: [5, 9, 10], // Luma only accepts "5s", "9s", "10s"
+    supportedInputs: ['text', 'image', 'video'], // Supports video-to-video via modify
     estimatedTime: '20-40s',
     costPer10Seconds: 2.0,
   },
@@ -117,6 +121,7 @@ export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'che
     id: 'sora',
     name: 'Sora',  // API model: sora-2-2025-12-08
     maxDuration: 20,
+    allowedDurations: [5, 10, 15, 20], // Flexible
     supportedInputs: ['text', 'image'],
     estimatedTime: '45-90s',
     costPer10Seconds: 1.0,
@@ -125,6 +130,7 @@ export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'che
     id: 'odyssey',
     name: 'Odyssey',  // Not yet implemented
     maxDuration: 30,
+    allowedDurations: [5, 10, 15, 30],
     supportedInputs: ['text', 'image'],
     estimatedTime: '20-40s',
     costPer10Seconds: 0.6,
@@ -133,6 +139,7 @@ export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'che
     id: 'world_labs',
     name: 'World Labs',  // Not yet implemented
     maxDuration: 10,
+    allowedDurations: [5, 10],
     supportedInputs: ['text'],
     estimatedTime: '30-45s',
     costPer10Seconds: 0.75,
