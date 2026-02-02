@@ -141,9 +141,10 @@ export async function POST(request: NextRequest) {
       })
       console.log(`[Generate] Video record created successfully: ${videoId}`)
     } catch (dbError) {
+      const dbErrorMessage = dbError instanceof Error ? dbError.message : String(dbError)
       console.error(`[Generate] Failed to create video record:`, dbError)
       return NextResponse.json(
-        { error: 'Failed to create video record in database' },
+        { error: `Failed to create video record: ${dbErrorMessage}` },
         { status: 500 }
       )
     }
