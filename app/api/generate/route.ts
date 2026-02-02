@@ -222,14 +222,19 @@ export async function POST(request: NextRequest) {
     })
 
     // Persist to database for serverless environments (activeJobs Map doesn't persist)
-    await prisma.generationJob.create({
-      data: {
-        videoId,
-        externalJobId: genResult.jobId,
-        status: 'processing',
-        startedAt: new Date(),
-      },
-    })
+    // Optional: gracefully skip if table doesn't exist
+    try {
+      await prisma.generationJob.create({
+        data: {
+          videoId,
+          externalJobId: genResult.jobId,
+          status: 'processing',
+          startedAt: new Date(),
+        },
+      })
+    } catch (dbError) {
+      console.warn('[Generate] Could not persist to GenerationJob table (table may not exist):', dbError instanceof Error ? dbError.message : dbError)
+    }
 
     // Update video status
     await prisma.video.update({
@@ -304,21 +309,27 @@ export async function GET(request: NextRequest) {
     let activeJob = activeJobs.get(videoId)
 
     // If not in cache and video is processing, look up from database (critical for serverless)
+    // Optional: gracefully skip if table doesn't exist
     if (!activeJob && ((video as { status: string }).status === 'processing' || (video as { status: string }).status === 'pending')) {
-      const dbJob = await prisma.generationJob.findUnique({
-        where: { videoId },
-      })
+      try {
+        const dbJob = await prisma.generationJob.findUnique({
+          where: { videoId },
+        })
 
-      if (dbJob && dbJob.externalJobId) {
-        console.log(`[Status] Restored job from database: ${dbJob.externalJobId}`)
-        activeJob = {
-          model: (video as { model: VideoModelId }).model,
-          externalJobId: dbJob.externalJobId,
-          status: dbJob.status as 'pending' | 'processing' | 'completed' | 'failed',
-          startedAt: dbJob.startedAt?.getTime() || Date.now(),
+        if (dbJob && dbJob.externalJobId) {
+          console.log(`[Status] Restored job from database: ${dbJob.externalJobId}`)
+          activeJob = {
+            model: (video as { model: VideoModelId }).model,
+            externalJobId: dbJob.externalJobId,
+            status: dbJob.status as 'pending' | 'processing' | 'completed' | 'failed',
+            startedAt: dbJob.startedAt?.getTime() || Date.now(),
+          }
+          // Cache it for future requests
+          activeJobs.set(videoId, activeJob)
         }
-        // Cache it for future requests
-        activeJobs.set(videoId, activeJob)
+      } catch (dbError) {
+        console.warn('[Status] Could not query GenerationJob table (table may not exist):', dbError instanceof Error ? dbError.message : dbError)
+        // Continue without database fallback - rely on in-memory cache
       }
     }
 
@@ -352,42 +363,52 @@ export async function GET(request: NextRequest) {
           activeJob.thumbnailUrl = modelStatus.thumbnailUrl
           activeJobs.set(videoId, activeJob)
 
-          await Promise.all([
-            prisma.video.update({
-              where: { id: videoId },
-              data: {
-                status: 'completed',
-                videoUrl: modelStatus.videoUrl,
-                thumbnailUrl: modelStatus.thumbnailUrl,
-                completedAt: new Date(),
-              },
-            }),
-            prisma.generationJob.update({
+          // Update Video table
+          await prisma.video.update({
+            where: { id: videoId },
+            data: {
+              status: 'completed',
+              videoUrl: modelStatus.videoUrl,
+              thumbnailUrl: modelStatus.thumbnailUrl,
+              completedAt: new Date(),
+            },
+          })
+
+          // Update GenerationJob table (optional, skip if table doesn't exist)
+          try {
+            await prisma.generationJob.update({
               where: { videoId },
               data: {
                 status: 'completed',
                 completedAt: new Date(),
               },
-            }),
-          ])
+            })
+          } catch (dbError) {
+            // Ignore if table doesn't exist
+          }
         } else if (modelStatus.status === 'failed') {
           activeJob.status = 'failed'
           activeJob.error = modelStatus.error
           activeJobs.set(videoId, activeJob)
 
-          await Promise.all([
-            prisma.video.update({
-              where: { id: videoId },
-              data: { status: 'failed' },
-            }),
-            prisma.generationJob.update({
+          // Update Video table
+          await prisma.video.update({
+            where: { id: videoId },
+            data: { status: 'failed' },
+          })
+
+          // Update GenerationJob table (optional, skip if table doesn't exist)
+          try {
+            await prisma.generationJob.update({
               where: { videoId },
               data: {
                 status: 'failed',
                 lastError: modelStatus.error,
               },
-            }),
-          ])
+            })
+          } catch (dbError) {
+            // Ignore if table doesn't exist
+          }
         }
 
         return NextResponse.json({
