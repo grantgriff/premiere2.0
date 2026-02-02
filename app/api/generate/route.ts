@@ -221,6 +221,16 @@ export async function POST(request: NextRequest) {
       startedAt: Date.now(),
     })
 
+    // Persist to database for serverless environments (activeJobs Map doesn't persist)
+    await prisma.generationJob.create({
+      data: {
+        videoId,
+        externalJobId: genResult.jobId,
+        status: 'processing',
+        startedAt: new Date(),
+      },
+    })
+
     // Update video status
     await prisma.video.update({
       where: { id: videoId },
@@ -290,8 +300,27 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Status] Found video: ${videoId}, status: ${(video as { status: string }).status}`)
 
-    // Check if we have an active job for this video
-    const activeJob = activeJobs.get(videoId)
+    // Check if we have an active job for this video (try in-memory cache first)
+    let activeJob = activeJobs.get(videoId)
+
+    // If not in cache and video is processing, look up from database (critical for serverless)
+    if (!activeJob && ((video as { status: string }).status === 'processing' || (video as { status: string }).status === 'pending')) {
+      const dbJob = await prisma.generationJob.findUnique({
+        where: { videoId },
+      })
+
+      if (dbJob && dbJob.externalJobId) {
+        console.log(`[Status] Restored job from database: ${dbJob.externalJobId}`)
+        activeJob = {
+          model: (video as { model: VideoModelId }).model,
+          externalJobId: dbJob.externalJobId,
+          status: dbJob.status as 'pending' | 'processing' | 'completed' | 'failed',
+          startedAt: dbJob.startedAt?.getTime() || Date.now(),
+        }
+        // Cache it for future requests
+        activeJobs.set(videoId, activeJob)
+      }
+    }
 
     if (activeJob) {
       // If already completed or failed, return cached result
@@ -313,6 +342,7 @@ export async function GET(request: NextRequest) {
 
       // Poll the model API for status
       if (activeJob.externalJobId) {
+        console.log(`[Status] Polling model API for job: ${activeJob.externalJobId}`)
         const modelStatus = await checkModelStatus(activeJob.model, activeJob.externalJobId)
 
         // Update cache and database
@@ -322,24 +352,42 @@ export async function GET(request: NextRequest) {
           activeJob.thumbnailUrl = modelStatus.thumbnailUrl
           activeJobs.set(videoId, activeJob)
 
-          await prisma.video.update({
-            where: { id: videoId },
-            data: {
-              status: 'completed',
-              videoUrl: modelStatus.videoUrl,
-              thumbnailUrl: modelStatus.thumbnailUrl,
-              completedAt: new Date(),
-            },
-          })
+          await Promise.all([
+            prisma.video.update({
+              where: { id: videoId },
+              data: {
+                status: 'completed',
+                videoUrl: modelStatus.videoUrl,
+                thumbnailUrl: modelStatus.thumbnailUrl,
+                completedAt: new Date(),
+              },
+            }),
+            prisma.generationJob.update({
+              where: { videoId },
+              data: {
+                status: 'completed',
+                completedAt: new Date(),
+              },
+            }),
+          ])
         } else if (modelStatus.status === 'failed') {
           activeJob.status = 'failed'
           activeJob.error = modelStatus.error
           activeJobs.set(videoId, activeJob)
 
-          await prisma.video.update({
-            where: { id: videoId },
-            data: { status: 'failed' },
-          })
+          await Promise.all([
+            prisma.video.update({
+              where: { id: videoId },
+              data: { status: 'failed' },
+            }),
+            prisma.generationJob.update({
+              where: { videoId },
+              data: {
+                status: 'failed',
+                lastError: modelStatus.error,
+              },
+            }),
+          ])
         }
 
         return NextResponse.json({
