@@ -109,8 +109,11 @@ export function QualityBadge({ score, report, size = 'md', showDetails = true }:
   return (
     <div className="inline-block">
       <button
-        onClick={() => showDetails && setExpanded(!expanded)}
-        className={`flex items-center gap-1.5 rounded-full border ${getScoreBgColor(score)} ${sizeClasses[size]} ${showDetails ? 'cursor-pointer hover:opacity-80' : 'cursor-default'} transition-opacity ${hasCriticalRisks ? 'ring-2 ring-red-500/50' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (showDetails) setExpanded(!expanded)
+        }}
+        className={`flex items-center gap-1.5 rounded-full border backdrop-blur-sm ${getScoreBgColor(score)} ${sizeClasses[size]} ${showDetails ? 'cursor-pointer hover:opacity-80' : 'cursor-default'} transition-opacity ${hasCriticalRisks ? 'ring-2 ring-red-500/50' : ''}`}
       >
         <Icon className={`${iconSizes[size]} ${getScoreColor(score)}`} />
         <span className={getScoreColor(score)}>
@@ -125,7 +128,10 @@ export function QualityBadge({ score, report, size = 'md', showDetails = true }:
       </button>
 
       {expanded && report && (
-        <div className="mt-2 p-4 rounded-lg bg-background-secondary border border-border text-sm max-w-md">
+        <div
+          className="mt-2 p-4 rounded-lg bg-background-secondary border border-border text-sm max-w-md"
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Summary */}
           {report.summary && (
             <div className="mb-4 p-2 bg-background rounded border border-border">

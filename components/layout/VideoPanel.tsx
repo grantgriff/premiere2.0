@@ -147,7 +147,7 @@ export function VideoPanel() {
               />
 
               {/* Quality Badge */}
-              <div className="absolute top-4 right-4">
+              <div className="absolute top-4 right-4 z-20">
                 {currentVideo.isVerifying ? (
                   <div className="flex items-center gap-1.5 text-foreground-secondary text-sm bg-background/80 px-2.5 py-1 rounded-full">
                     <Shield className="w-4 h-4 animate-pulse" />
@@ -165,7 +165,7 @@ export function VideoPanel() {
               {/* Play/Pause Overlay */}
               <button
                 onClick={togglePlay}
-                className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity"
+                className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity"
               >
                 {isPlaying ? (
                   <Pause className="w-16 h-16 text-white" />
