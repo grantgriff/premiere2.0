@@ -7,19 +7,25 @@ import {
   deleteConversation,
 } from '@/lib/db-supabase'
 import { generateId } from '@/lib/utils'
+import { createServerClient } from '@/lib/supabase-server'
 
 // Create a new conversation
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { userId, title } = body
+    // Get authenticated user from session
+    const supabase = await createServerClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-    if (!userId) {
+    if (authError || !user) {
       return NextResponse.json(
-        { error: 'Missing required field: userId' },
-        { status: 400 }
+        { error: 'Unauthorized. Please log in.' },
+        { status: 401 }
       )
     }
+
+    const userId = user.id
+    const body = await request.json()
+    const { title } = body
 
     const conversation = await createConversation({
       id: generateId(),
