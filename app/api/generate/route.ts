@@ -107,13 +107,13 @@ export async function POST(request: NextRequest) {
           model: model as VideoModelId,
           duration,
           status: 'pending',
-          styleReferenceUrls: JSON.stringify(styleReferenceUrls || []),
-          characterIds: JSON.stringify(characterIds || []),
+          styleReferenceUrls: JSON.stringify(styleReferenceUrls || []) as any,
+          characterIds: JSON.stringify(characterIds || []) as any,
           metadata: JSON.stringify({
             mentionedCharacters,
             styleReferences: styleReferences || [],
             requestedAt: new Date().toISOString(),
-          }),
+          }) as any,
         },
       })
       console.log(`[Generate] Video record created successfully: ${videoId}`)
