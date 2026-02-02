@@ -113,7 +113,7 @@ export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'che
     name: 'Luma',  // API model: ray-flash-2
     maxDuration: 10,
     allowedDurations: [5, 9, 10], // Luma only accepts "5s", "9s", "10s"
-    supportedInputs: ['text', 'image'],
+    supportedInputs: ['text', 'image', 'video'], // Supports video-to-video via modify
     estimatedTime: '20-40s',
     costPer10Seconds: 2.0,
   },
