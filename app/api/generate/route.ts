@@ -352,6 +352,7 @@ export async function GET(request: NextRequest) {
           activeJob.thumbnailUrl = modelStatus.thumbnailUrl
           activeJobs.set(videoId, activeJob)
 
+          // Update both Video and GenerationJob tables
           await Promise.all([
             prisma.video.update({
               where: { id: videoId },
@@ -375,6 +376,7 @@ export async function GET(request: NextRequest) {
           activeJob.error = modelStatus.error
           activeJobs.set(videoId, activeJob)
 
+          // Update both Video and GenerationJob tables
           await Promise.all([
             prisma.video.update({
               where: { id: videoId },
