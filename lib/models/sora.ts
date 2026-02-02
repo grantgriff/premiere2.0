@@ -24,8 +24,13 @@ interface SoraGenerationResponse {
 
 interface SoraStatusResponse {
   id: string
+  object?: string
   status: 'queued' | 'in_progress' | 'completed' | 'failed'
   created_at: number
+  progress?: number // 0-100 percentage
+  model?: string
+  seconds?: string
+  size?: string
   output_url?: string
   error?: {
     message: string
@@ -176,7 +181,12 @@ export async function checkSoraStatus(generationId: string): Promise<GenerationS
     }
 
     const data: SoraStatusResponse = await response.json()
-    console.log('[Sora] Status:', data.status, data.id)
+    console.log('[Sora] Status:', data.status, `progress: ${data.progress ?? 'N/A'}%`, data.id)
+
+    // Log full response for debugging
+    if (data.status !== 'completed') {
+      console.log('[Sora] Full status response:', JSON.stringify(data, null, 2))
+    }
 
     switch (data.status) {
       case 'completed':
