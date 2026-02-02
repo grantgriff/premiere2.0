@@ -36,12 +36,21 @@ interface VeoOperationResponse {
   done: boolean
   metadata?: Record<string, unknown>
   response?: {
-    generatedVideos: Array<{
+    // Can be either format depending on API version
+    generatedVideos?: Array<{
       video: {
         uri: string
         mimeType?: string
       }
     }>
+    generateVideoResponse?: {
+      generatedSamples: Array<{
+        video: {
+          uri: string
+          mimeType?: string
+        }
+      }>
+    }
   }
   error?: {
     code: number
@@ -90,11 +99,12 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
     console.log('Veo request:', JSON.stringify(request, null, 2))
 
     const response = await fetch(
-      `${VEO_API_BASE}/models/${VEO_MODEL}:generateVideos?key=${apiKey}`,
+      `${VEO_API_BASE}/models/${VEO_MODEL}:generateVideos`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
         },
         body: JSON.stringify(request),
       }
@@ -156,11 +166,12 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
       : `operations/${operationName}`
 
     const response = await fetch(
-      `${VEO_API_BASE}/${opPath}?key=${apiKey}`,
+      `${VEO_API_BASE}/${opPath}`,
       {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
         },
       }
     )
@@ -178,12 +189,23 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
       return { status: 'failed', error: data.error.message }
     }
 
-    if (data.done && data.response?.generatedVideos) {
-      const video = data.response.generatedVideos[0]
-      if (video?.video?.uri) {
+    if (data.done && data.response) {
+      // Handle both response formats
+      let videoUri: string | undefined
+
+      // Format 1: generatedVideos array
+      if (data.response.generatedVideos?.[0]?.video?.uri) {
+        videoUri = data.response.generatedVideos[0].video.uri
+      }
+      // Format 2: generateVideoResponse.generatedSamples array
+      else if (data.response.generateVideoResponse?.generatedSamples?.[0]?.video?.uri) {
+        videoUri = data.response.generateVideoResponse.generatedSamples[0].video.uri
+      }
+
+      if (videoUri) {
         return {
           status: 'completed',
-          videoUrl: video.video.uri,
+          videoUrl: videoUri,
           thumbnailUrl: undefined, // Veo doesn't provide thumbnails
         }
       }
