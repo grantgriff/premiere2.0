@@ -54,12 +54,12 @@ model Conversation {
 // Message Model
 // ===========================================
 model Message {
-  id             String      @id @default(uuid())
-  conversationId String      @map("conversation_id")
-  role           MessageRole
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  role           String   // 'user' | 'assistant' | 'system'
   content        String
-  mediaUrls      String      @default("[]") @map("media_urls") // JSON string for SQLite
-  createdAt      DateTime    @default(now()) @map("created_at")
+  mediaUrls      String   @default("[]") @map("media_urls") // JSON string
+  createdAt      DateTime @default(now()) @map("created_at")
 
   // Relationships
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -67,54 +67,32 @@ model Message {
   @@map("messages")
 }
 
-enum MessageRole {
-  user
-  assistant
-  system
-}
-
 // ===========================================
 // Video Model
 // ===========================================
 model Video {
-  id                 String      @id @default(uuid())
-  conversationId     String      @map("conversation_id")
-  userId             String      @map("user_id")
+  id                 String    @id @default(uuid())
+  conversationId     String    @map("conversation_id")
+  userId             String    @map("user_id")
   prompt             String
-  model              VideoModel
-  duration           Int         // seconds (1-30)
-  videoUrl           String?     @map("video_url")
-  thumbnailUrl       String?     @map("thumbnail_url")
-  status             VideoStatus @default(pending)
-  qualityScore       Float?      @map("quality_score") // 0-10
-  qualityReport      String?     @map("quality_report") // JSON string
-  styleReferenceUrls String      @default("[]") @map("style_reference_urls") // JSON string
-  characterIds       String      @default("[]") @map("character_ids") // JSON string
-  metadata           String?     // JSON string for model-specific params
-  createdAt          DateTime    @default(now()) @map("created_at")
-  completedAt        DateTime?   @map("completed_at")
+  model              String    // 'veo3_1' | 'runway' | 'luma' | 'sora' | 'odyssey' | 'world_labs'
+  duration           Int       // seconds (1-30)
+  videoUrl           String?   @map("video_url")
+  thumbnailUrl       String?   @map("thumbnail_url")
+  status             String    @default("pending") // 'pending' | 'processing' | 'completed' | 'failed'
+  qualityScore       Float?    @map("quality_score") // 0-10
+  qualityReport      String?   @map("quality_report") // JSON string
+  styleReferenceUrls String    @default("[]") @map("style_reference_urls") // JSON string
+  characterIds       String    @default("[]") @map("character_ids") // JSON string
+  metadata           String?   // JSON string for model-specific params
+  createdAt          DateTime  @default(now()) @map("created_at")
+  completedAt        DateTime? @map("completed_at")
 
   // Relationships
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@map("videos")
-}
-
-enum VideoModel {
-  veo3_1
-  runway
-  luma
-  sora
-  odyssey
-  world_labs
-}
-
-enum VideoStatus {
-  pending
-  processing
-  completed
-  failed
 }
 
 // ===========================================
@@ -140,23 +118,18 @@ model Character {
 // Style Reference Model
 // ===========================================
 model StyleReference {
-  id             String          @id @default(uuid())
-  userId         String          @map("user_id")
-  sourceUrl      String          @map("source_url")
-  sourceType     StyleSourceType @map("source_type")
-  colorPalette   String?         @map("color_palette") // JSON string
-  styleEmbedding String?         @map("style_embedding") // JSON string
-  createdAt      DateTime        @default(now()) @map("created_at")
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  sourceUrl      String   @map("source_url")
+  sourceType     String   @map("source_type") // 'upload' | 'youtube'
+  colorPalette   String?  @map("color_palette") // JSON string
+  styleEmbedding String?  @map("style_embedding") // JSON string
+  createdAt      DateTime @default(now()) @map("created_at")
 
   // Relationships
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("style_references")
-}
-
-enum StyleSourceType {
-  upload
-  youtube
 }
 
 // ===========================================
@@ -165,7 +138,7 @@ enum StyleSourceType {
 model GenerationJob {
   id             String    @id @default(uuid())
   videoId        String    @unique @map("video_id")
-  status         JobStatus @default(queued)
+  status         String    @default("queued") // 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled'
   attempts       Int       @default(0)
   lastError      String?   @map("last_error")
   externalJobId  String?   @map("external_job_id") // Model provider's job ID
@@ -175,12 +148,4 @@ model GenerationJob {
   completedAt    DateTime? @map("completed_at")
 
   @@map("generation_jobs")
-}
-
-enum JobStatus {
-  queued
-  processing
-  completed
-  failed
-  cancelled
 }
