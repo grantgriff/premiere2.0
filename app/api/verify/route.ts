@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { prisma } from '@/lib/prisma'
 import { analyzeVideoQuality, getHighSeverityIssues } from '@/lib/models/gemini'
 
 export async function POST(request: NextRequest) {
