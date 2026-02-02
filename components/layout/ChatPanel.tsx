@@ -14,7 +14,7 @@ import {
 import { useAppStore, useActiveConversation, VideoModel } from '@/lib/store'
 import { startGeneration, pollVideoStatus, verifyVideoQuality, VideoStatusResponse, StyleReference, createConversation as createConversationApi, createMessage as createMessageApi } from '@/lib/api'
 import { generateId } from '@/lib/utils'
-import { QualityReport } from '@/lib/models/types'
+import { QualityReport, MODEL_INFO, VideoModelId } from '@/lib/models/types'
 import { CharacterMention, extractCharacterMentions } from '@/components/ui/CharacterMention'
 import { CharacterManager } from '@/components/ui/CharacterManager'
 import { YouTubeSearchPanel, YouTubeVideo } from '@/components/ui/YouTubeSearchPanel'
@@ -36,7 +36,10 @@ const MODELS: { id: VideoModel; name: string; speed: string; disabled?: boolean 
   { id: 'world_labs', name: 'World Labs', speed: '30-45s', disabled: true },
 ]
 
-const DURATIONS = [1, 3, 5, 10, 15, 30]
+// Get allowed durations for the selected model
+function getModelDurations(modelId: VideoModel): number[] {
+  return MODEL_INFO[modelId as VideoModelId]?.allowedDurations || [5, 10]
+}
 
 export function ChatPanel() {
   const [input, setInput] = useState('')
@@ -79,6 +82,15 @@ export function ChatPanel() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeConversation?.messages])
+
+  // Auto-select valid duration when model changes
+  useEffect(() => {
+    const allowedDurations = getModelDurations(selectedModel)
+    if (!allowedDurations.includes(selectedDuration)) {
+      // Select the first allowed duration for this model
+      setSelectedDuration(allowedDurations[0])
+    }
+  }, [selectedModel, selectedDuration, setSelectedDuration])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -496,7 +508,7 @@ export function ChatPanel() {
       <div className="px-4 py-3 border-t border-border">
         <label className="text-xs text-foreground-secondary mb-2 block">Duration</label>
         <div className="flex flex-wrap gap-2">
-          {DURATIONS.map((duration) => (
+          {getModelDurations(selectedModel).map((duration) => (
             <button
               key={duration}
               onClick={() => setSelectedDuration(duration)}
