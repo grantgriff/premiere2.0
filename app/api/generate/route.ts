@@ -72,6 +72,8 @@ export async function POST(request: NextRequest) {
         data: {
           id: userId,
           email: `user-${userId.slice(0, 8)}@premiere.app`, // Placeholder email
+          name: `User ${userId.slice(0, 8)}`, // Required field
+          googleId: `auto-${userId}`, // Required unique field for auto-created users
           credits: 0, // Credits not used - unlimited generations
         },
       })
