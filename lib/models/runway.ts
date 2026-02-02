@@ -36,10 +36,15 @@ function getHeaders(apiKey: string): HeadersInit {
 }
 
 export async function generateWithRunway(params: GenerationParams): Promise<GenerationResult> {
-  const apiKey = process.env.RUNWAY_API_KEY
+  const apiKey = process.env.RUNWAY_API_KEY?.trim() // Trim whitespace/newlines
   if (!apiKey) {
     return { success: false, error: 'Runway API key not configured' }
   }
+
+  // Debug: Log key format (not the actual key)
+  const keyLength = apiKey.length
+  const startsCorrectly = apiKey.startsWith('key_')
+  console.log(`[Runway] API key length: ${keyLength} (expected: 132), starts with key_: ${startsCorrectly}`)
 
   try {
     // Determine which endpoint to use based on input
@@ -117,7 +122,7 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
 }
 
 export async function checkRunwayStatus(taskId: string): Promise<GenerationStatus> {
-  const apiKey = process.env.RUNWAY_API_KEY
+  const apiKey = process.env.RUNWAY_API_KEY?.trim()
   if (!apiKey) {
     return { status: 'failed', error: 'Runway API key not configured' }
   }
