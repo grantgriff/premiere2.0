@@ -191,52 +191,14 @@ export async function checkSoraStatus(generationId: string): Promise<GenerationS
     switch (data.status) {
       case 'completed':
         // Download video from content endpoint and upload to Supabase for public access
-        let videoUrl: string | undefined
+        const videoUrl = await downloadAndUploadSoraVideo(generationId, apiKey)
 
-        try {
-          console.log('[Sora] Downloading video from content endpoint...')
-          const contentResponse = await fetch(`${OPENAI_API_BASE}/videos/${generationId}/content`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-            },
-          })
-
-          if (contentResponse.ok) {
-            const videoBlob = await contentResponse.blob()
-            console.log(`[Sora] Downloaded video: ${videoBlob.size} bytes, type: ${videoBlob.type}`)
-
-            // Upload to Supabase storage
-            const supabase = getSupabaseClient()
-            if (supabase && videoBlob.size > 0) {
-              const fileName = `sora-${generationId}-${Date.now()}.mp4`
-              const filePath = `generated/${fileName}`
-
-              const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('videos')
-                .upload(filePath, videoBlob, {
-                  contentType: 'video/mp4',
-                  upsert: true,
-                })
-
-              if (uploadError) {
-                console.error('[Sora] Failed to upload to Supabase:', uploadError)
-              } else {
-                // Get public URL
-                const { data: urlData } = supabase.storage
-                  .from('videos')
-                  .getPublicUrl(filePath)
-                videoUrl = urlData.publicUrl
-                console.log('[Sora] Video uploaded to Supabase:', videoUrl)
-              }
-            } else {
-              console.warn('[Sora] Supabase client not available or empty video')
-            }
-          } else {
-            console.error('[Sora] Failed to download video:', contentResponse.status)
+        if (!videoUrl) {
+          // Critical: If download/upload fails, mark as failed instead of returning completed without URL
+          return {
+            status: 'failed',
+            error: 'Failed to download and upload video to storage. Please try again.',
           }
-        } catch (downloadError) {
-          console.error('[Sora] Error downloading/uploading video:', downloadError)
         }
 
         return {
@@ -261,6 +223,86 @@ export async function checkSoraStatus(generationId: string): Promise<GenerationS
       error: error instanceof Error ? error.message : 'Unknown error',
     }
   }
+}
+
+// Helper: Download video from OpenAI and upload to Supabase with retry logic
+async function downloadAndUploadSoraVideo(
+  generationId: string,
+  apiKey: string,
+  maxRetries: number = 3
+): Promise<string | undefined> {
+  let lastError: Error | undefined
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[Sora] Download attempt ${attempt}/${maxRetries}...`)
+
+      // Download video from OpenAI
+      const contentResponse = await fetch(`${OPENAI_API_BASE}/videos/${generationId}/content`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        },
+      })
+
+      if (!contentResponse.ok) {
+        throw new Error(`Failed to download video: HTTP ${contentResponse.status}`)
+      }
+
+      const videoBlob = await contentResponse.blob()
+      console.log(`[Sora] Downloaded video: ${videoBlob.size} bytes, type: ${videoBlob.type}`)
+
+      if (videoBlob.size === 0) {
+        throw new Error('Downloaded video is empty (0 bytes)')
+      }
+
+      // Upload to Supabase storage
+      const supabase = getSupabaseClient()
+      if (!supabase) {
+        throw new Error('Supabase client not available - check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables')
+      }
+
+      const fileName = `sora-${generationId}-${Date.now()}.mp4`
+      const filePath = `generated/${fileName}`
+
+      console.log(`[Sora] Uploading to Supabase: ${filePath}`)
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('videos')
+        .upload(filePath, videoBlob, {
+          contentType: 'video/mp4',
+          upsert: true,
+        })
+
+      if (uploadError) {
+        throw new Error(`Supabase upload failed: ${uploadError.message}`)
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('videos')
+        .getPublicUrl(filePath)
+
+      if (!urlData?.publicUrl) {
+        throw new Error('Failed to get public URL from Supabase')
+      }
+
+      console.log(`[Sora] Video uploaded successfully: ${urlData.publicUrl}`)
+      return urlData.publicUrl
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      console.error(`[Sora] Attempt ${attempt}/${maxRetries} failed:`, lastError.message)
+
+      // Wait before retry (exponential backoff: 2s, 4s, 8s)
+      if (attempt < maxRetries) {
+        const waitTime = Math.pow(2, attempt) * 1000
+        console.log(`[Sora] Retrying in ${waitTime}ms...`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+      }
+    }
+  }
+
+  console.error(`[Sora] All ${maxRetries} download/upload attempts failed:`, lastError?.message)
+  return undefined
 }
 
 // Helper: Map duration to Sora allowed values (4, 8, or 12 seconds)
