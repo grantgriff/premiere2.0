@@ -129,7 +129,7 @@ export function QualityBadge({ score, report, size = 'md', showDetails = true }:
 
       {expanded && report && (
         <div
-          className="mt-2 p-4 rounded-lg bg-background-secondary border border-border text-sm max-w-md"
+          className="mt-2 p-4 rounded-lg bg-background-secondary border border-border text-sm max-w-md max-h-[320px] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Summary */}
