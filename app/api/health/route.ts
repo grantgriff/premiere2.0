@@ -10,9 +10,10 @@ export async function GET() {
       database: await checkDatabase(),
       supabase: checkSupabase(),
       models: {
-        gemini: !!process.env.GEMINI_API_KEY, // Powers both Veo video gen & quality analysis
+        googleAI: !!(process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY), // Powers Veo video gen & Gemini quality analysis
         runway: checkRunwayConfig(),
         luma: !!process.env.LUMA_API_KEY,
+        sora: !!process.env.OPENAI_API_KEY,
       },
       youtube: !!process.env.YOUTUBE_API_KEY,
     },
