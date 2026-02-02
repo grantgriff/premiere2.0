@@ -57,6 +57,14 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
     const hasImageInput = params.styleReferenceUrl && isImageUrl(params.styleReferenceUrl)
     const hasVideoInput = params.styleReferenceUrl && isVideoUrl(params.styleReferenceUrl)
 
+    // Use character reference image if no style reference is provided
+    const characterImageUrl = params.characterReferenceUrls?.[0]
+    const useCharacterAsImage = !params.styleReferenceUrl && characterImageUrl
+
+    if (useCharacterAsImage) {
+      console.log(`[Runway] Using character reference image as promptImage: ${characterImageUrl.substring(0, 60)}...`)
+    }
+
     let endpoint: string
     let requestBody: Record<string, unknown>
 
@@ -69,12 +77,12 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
         promptText: params.prompt,
         ratio: formatRatio(params.aspectRatio || '16:9'),
       }
-    } else if (hasImageInput) {
-      // Image-to-video
+    } else if (hasImageInput || useCharacterAsImage) {
+      // Image-to-video (from style reference OR character image)
       endpoint = `${RUNWAY_API_BASE}/image_to_video`
       requestBody = {
         model: RUNWAY_MODELS.imageToVideo,
-        promptImage: params.styleReferenceUrl,
+        promptImage: params.styleReferenceUrl || characterImageUrl,
         promptText: params.prompt,
         ratio: formatRatio(params.aspectRatio || '16:9'),
         duration: Math.min(params.duration, 10), // Gen4 max is 10s

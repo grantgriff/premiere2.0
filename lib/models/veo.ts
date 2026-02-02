@@ -19,6 +19,16 @@ interface VeoGenerateRequest {
     mimeType?: string
     fileUri?: string
   }
+  // Up to 3 reference images for style/content guidance (Veo 3.1 only)
+  referenceImages?: Array<{
+    image: {
+      fileUri?: string
+      bytesBase64Encoded?: string
+      mimeType?: string
+    }
+    // Reference type: 'REFERENCE_TYPE_STYLE' | 'REFERENCE_TYPE_SUBJECT' etc.
+    referenceType?: string
+  }>
 }
 
 interface VeoGenerateResponse {
@@ -85,7 +95,7 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
       },
     }
 
-    // Add image for image-to-video if provided
+    // Add image for image-to-video if provided (first frame)
     if (params.styleReferenceUrl) {
       // If it's a file URI or https URL, use fileUri
       if (params.styleReferenceUrl.startsWith('http') || params.styleReferenceUrl.startsWith('gs://')) {
@@ -96,7 +106,28 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
       // Note: For base64 images, you'd use bytesBase64Encoded instead
     }
 
-    console.log('Veo request:', JSON.stringify(request, null, 2))
+    // Add character reference images (Veo 3.1 supports up to 3 referenceImages)
+    if (params.characterReferenceUrls && params.characterReferenceUrls.length > 0) {
+      // Take up to 3 character images
+      const characterImages = params.characterReferenceUrls.slice(0, 3)
+      console.log(`[Veo] Adding ${characterImages.length} character reference image(s)`)
+
+      request.referenceImages = characterImages.map(url => ({
+        image: {
+          fileUri: url,
+        },
+        // Use SUBJECT type for character consistency
+        referenceType: 'REFERENCE_TYPE_SUBJECT',
+      }))
+
+      // Note: When using referenceImages, durationSeconds must be "8" according to docs
+      if (request.config && characterImages.length > 0) {
+        request.config.durationSeconds = '8'
+        console.log('[Veo] Using 8s duration (required with referenceImages)')
+      }
+    }
+
+    console.log('[Veo] Request:', JSON.stringify(request, null, 2))
 
     const response = await fetch(
       `${VEO_API_BASE}/models/${VEO_MODEL}:generateVideos`,

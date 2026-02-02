@@ -9,7 +9,7 @@ export interface GenerationParams {
   stylePreset?: 'realistic' | 'cinematic' | 'animated' | 'abstract'
   styleReferenceUrl?: string
   styleInfluence?: number // 0-100
-  characterEmbeddings?: Record<string, unknown>[]
+  characterReferenceUrls?: string[] // Character reference image URLs
   negativePrompt?: string
 }
 
