@@ -76,11 +76,15 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
     } else {
       // Text-to-video
       endpoint = `${RUNWAY_API_BASE}/text_to_video`
+      const mappedDuration = mapToVeoDuration(params.duration)
+      if (mappedDuration !== params.duration) {
+        console.log(`[Runway] Mapped duration ${params.duration}s -> ${mappedDuration}s (Veo requires 4, 6, or 8)`)
+      }
       requestBody = {
         model: RUNWAY_MODELS.textToVideo,
         promptText: params.prompt,
         ratio: formatRatioForTextToVideo(params.aspectRatio || '16:9'),
-        duration: Math.min(params.duration, 8), // Veo max durations: 4, 6, 8
+        duration: mappedDuration, // Veo only accepts 4, 6, or 8
         audio: true,
       }
     }
@@ -212,4 +216,13 @@ function formatRatioForTextToVideo(ratio: string): string {
     '1:1': '1280:720', // No 1:1 for text-to-video, default to 16:9
   }
   return ratioMap[ratio] || '1280:720'
+}
+
+// Helper: Map any duration to valid Veo duration (4, 6, or 8 seconds only)
+function mapToVeoDuration(duration: number): number {
+  // Veo only supports durations of 4, 6, or 8 seconds
+  // Map to the nearest valid value
+  if (duration <= 5) return 4
+  if (duration <= 7) return 6
+  return 8
 }
