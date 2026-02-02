@@ -38,13 +38,19 @@ function getHeaders(apiKey: string): HeadersInit {
 export async function generateWithRunway(params: GenerationParams): Promise<GenerationResult> {
   const apiKey = process.env.RUNWAY_API_KEY?.trim() // Trim whitespace/newlines
   if (!apiKey) {
-    return { success: false, error: 'Runway API key not configured' }
+    console.error('[Runway] RUNWAY_API_KEY environment variable is not set')
+    return { success: false, error: 'Runway API key not configured. Please set RUNWAY_API_KEY environment variable.' }
   }
 
   // Debug: Log key format (not the actual key)
   const keyLength = apiKey.length
   const startsCorrectly = apiKey.startsWith('key_')
-  console.log(`[Runway] API key length: ${keyLength} (expected: 132), starts with key_: ${startsCorrectly}`)
+  console.log(`[Runway] API key validation - length: ${keyLength}, starts with "key_": ${startsCorrectly}`)
+
+  if (!startsCorrectly) {
+    console.error('[Runway] API key does not start with "key_" - this may be invalid')
+    return { success: false, error: 'Runway API key appears to be invalid (should start with "key_")' }
+  }
 
   try {
     // Determine which endpoint to use based on input
@@ -99,10 +105,31 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('Runway API error:', response.status, errorText)
+      console.error('[Runway] API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+        endpoint: endpoint,
+        requestBody: JSON.stringify(requestBody),
+      })
 
       if (response.status === 429) {
         return { success: false, error: 'Runway rate limit exceeded. Please try again later.' }
+      }
+
+      if (response.status === 401) {
+        return { success: false, error: 'Runway API authentication failed. Please check your API key.' }
+      }
+
+      if (response.status === 400) {
+        // Try to parse the error for more details
+        try {
+          const errorJson = JSON.parse(errorText)
+          const errorDetail = errorJson.error || errorJson.message || errorText
+          return { success: false, error: `Runway API validation error: ${errorDetail}` }
+        } catch {
+          return { success: false, error: `Runway API validation error: ${errorText}` }
+        }
       }
 
       return { success: false, error: `Runway API error (${response.status}): ${errorText}` }

@@ -223,9 +223,21 @@ export async function POST(request: NextRequest) {
       estimatedTime: modelInfo.estimatedTime,
     })
   } catch (error) {
-    console.error('Generation error:', error)
+    // Log full error details for debugging
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : undefined
+    console.error('Generation error:', {
+      message: errorMessage,
+      stack: errorStack,
+      error: error,
+    })
+
+    // Return the actual error message to help with debugging
     return NextResponse.json(
-      { error: 'Failed to start video generation' },
+      {
+        error: `Failed to start video generation: ${errorMessage}`,
+        details: process.env.NODE_ENV === 'development' ? errorStack : undefined
+      },
       { status: 500 }
     )
   }

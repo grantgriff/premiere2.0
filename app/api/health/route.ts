@@ -11,7 +11,7 @@ export async function GET() {
       supabase: checkSupabase(),
       models: {
         gemini: !!process.env.GEMINI_API_KEY, // Powers both Veo video gen & quality analysis
-        runway: !!process.env.RUNWAY_API_KEY,
+        runway: checkRunwayConfig(),
         luma: !!process.env.LUMA_API_KEY,
       },
       youtube: !!process.env.YOUTUBE_API_KEY,
@@ -39,4 +39,18 @@ function checkSupabase(): boolean {
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
     (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
   )
+}
+
+function checkRunwayConfig(): { configured: boolean; valid: boolean; error?: string } {
+  const apiKey = process.env.RUNWAY_API_KEY?.trim()
+
+  if (!apiKey) {
+    return { configured: false, valid: false, error: 'RUNWAY_API_KEY not set' }
+  }
+
+  if (!apiKey.startsWith('key_')) {
+    return { configured: true, valid: false, error: 'API key should start with "key_"' }
+  }
+
+  return { configured: true, valid: true }
 }
