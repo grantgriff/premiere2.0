@@ -170,9 +170,11 @@ export async function POST(request: NextRequest) {
       }
     } else if (styleReferenceUrls && styleReferenceUrls.length > 0) {
       primaryStyleUrl = styleReferenceUrls[0]
-      const isImage = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(primaryStyleUrl)
-      const isVideo = /\.(mp4|mov|avi|webm|mkv)$/i.test(primaryStyleUrl)
-      styleReferenceType = isImage ? 'image' : isVideo ? 'video' : undefined
+      if (primaryStyleUrl) {
+        const isImage = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(primaryStyleUrl)
+        const isVideo = /\.(mp4|mov|avi|webm|mkv)$/i.test(primaryStyleUrl)
+        styleReferenceType = isImage ? 'image' : isVideo ? 'video' : undefined
+      }
     }
 
     // ===== PROMPT ENHANCEMENT WITH GEMINI 2.5 PRO =====
