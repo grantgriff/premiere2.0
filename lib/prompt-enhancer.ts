@@ -55,7 +55,8 @@ export async function enhancePromptWithGemini(
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+    // Use Gemini 2.5 Flash
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
     // Build context for the enhancement
     const hasCharacters = params.characters && params.characters.length > 0
@@ -81,7 +82,7 @@ ${params.hasStyleReference ? `- Style reference: ${params.styleReferenceType} (w
 
 Please enhance this prompt following these guidelines:
 
-1. ${hasCharacters && params.hasCharacterImages ? `The character ${params.characters![0].name} from the reference image is the main subject. Create a DETAILED prompt (aim for 500-800 characters) that includes: (a) Character name and what they're doing, (b) Specific movements and actions in detail, (c) How the character should maintain visual consistency with the reference image (appearance, style, clothing), (d) Camera movements and framing, (e) Environment and atmosphere. Example: "${params.characters![0].name} climbs the rocky mountain face at sunset, reaching upward with both hands to grip the next ledge, muscles tensing with effort. The character maintains the exact appearance, facial features, hairstyle, and clothing shown in the reference image throughout the entire shot. Camera slowly tracks alongside ${params.characters![0].name} from a side angle, capturing the determination in their expression as golden hour light illuminates the scene..."` : hasCharacters ? `START with full character introduction: "A detailed video of ${params.characters![0].name}, ${params.characters![0].description}, [performing detailed action]..."` : 'Keep and expand upon the core action/scene from the original prompt'}
+1. ${hasCharacters && params.hasCharacterImages ? `The character ${params.characters![0].name} is the main subject. Create a DETAILED prompt (aim for 500-800 characters) that includes: (a) ${params.characters![0].name} and what they're doing, (b) Specific movements and actions in detail, (c) Character's style and appearance, (d) Camera movements and framing, (e) Environment and atmosphere. Example: "${params.characters![0].name} climbs the rocky mountain face at sunset, reaching upward with both hands to grip the next ledge, muscles tensing with effort. Camera slowly tracks alongside ${params.characters![0].name} from a side angle, capturing their expression as golden hour light illuminates the scene..."` : hasCharacters ? `START with full character introduction: "A detailed video of ${params.characters![0].name}, ${params.characters![0].description}, [performing detailed action]..."` : 'Keep and expand upon the core action/scene from the original prompt'}
 
 2. Add rich visual details:
    - Camera movement and angles
@@ -101,7 +102,7 @@ Please enhance this prompt following these guidelines:
 
 5. Use present tense and active voice
 
-6. ${hasCharacters ? `Explicitly mention maintaining visual consistency with the reference image - include phrases like "matching the exact appearance shown in the reference image" or "maintaining the character's look from the provided image"` : 'Focus on creating a vivid, film-like scene with cinematic details'}
+6. ${hasCharacters ? `Describe the character naturally within the scene - focus on their actions, emotions, and role in the narrative` : 'Focus on creating a vivid, film-like scene with cinematic details'}
 
 7. Avoid:
    - Multiple scenes or cuts
