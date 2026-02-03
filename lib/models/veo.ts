@@ -2,7 +2,7 @@
 // Docs: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo
 import { GenerationParams, GenerationResult, GenerationStatus } from './types'
 import { GoogleAuth } from 'google-auth-library'
-import { supabase, supabaseAdmin, STORAGE_BUCKETS } from '../supabase'
+import { supabase, getSupabaseAdmin, STORAGE_BUCKETS } from '../supabase'
 import { generateId } from '../utils'
 
 // Vertex AI endpoints
@@ -307,6 +307,7 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
           const filePath = `generated/${fileName}`
 
           console.log('[Veo] Uploading to Supabase storage with admin client...')
+          const supabaseAdmin = getSupabaseAdmin()
           const { data, error } = await supabaseAdmin.storage
             .from(STORAGE_BUCKETS.VIDEOS)
             .upload(filePath, videoBlob, {

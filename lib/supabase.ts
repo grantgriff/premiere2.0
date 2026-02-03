@@ -18,17 +18,30 @@ export const supabase = createClient(
 )
 
 // Service role client for backend operations (bypasses RLS)
-// Use this for automated backend tasks like uploading Veo base64 videos
-export const supabaseAdmin = createClient(
-  getSupabaseUrl(),
-  getServiceRoleKey(),
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    }
+// Lazily initialized to avoid build errors when env var not available
+let _supabaseAdmin: SupabaseClient | null = null
+
+export const getSupabaseAdmin = (): SupabaseClient => {
+  if (_supabaseAdmin) return _supabaseAdmin
+
+  const serviceRoleKey = getServiceRoleKey()
+  if (!serviceRoleKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is required for admin operations')
   }
-)
+
+  _supabaseAdmin = createClient(
+    getSupabaseUrl(),
+    serviceRoleKey,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      }
+    }
+  )
+
+  return _supabaseAdmin
+}
 
 // Singleton browser client - stored globally to prevent multiple instances
 let browserClient: SupabaseClient | null = null
