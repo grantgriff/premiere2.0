@@ -2,6 +2,8 @@
 // Docs: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo
 import { GenerationParams, GenerationResult, GenerationStatus } from './types'
 import { GoogleAuth } from 'google-auth-library'
+import { supabase, STORAGE_BUCKETS } from '../supabase'
+import { generateId } from '../utils'
 
 // Vertex AI endpoints
 const VERTEX_AI_REGION = 'us-central1'
@@ -286,11 +288,58 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
           thumbnailUrl: undefined,
         }
       } else if (video.bytesBase64Encoded) {
-        // Video returned as base64 - need to upload to your storage
-        console.log('[Veo] Video returned as base64, needs to be uploaded')
-        return {
-          status: 'failed',
-          error: 'Veo returned base64 video - need to implement upload to storage'
+        // Video returned as base64 - upload to Supabase storage
+        console.log('[Veo] Video returned as base64, uploading to Supabase storage...')
+
+        try {
+          // Convert base64 to Blob
+          const base64Data = video.bytesBase64Encoded
+          const binaryString = atob(base64Data)
+          const bytes = new Uint8Array(binaryString.length)
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i)
+          }
+          const videoBlob = new Blob([bytes], { type: video.mimeType || 'video/mp4' })
+
+          // Upload to Supabase storage
+          const videoId = generateId()
+          const fileName = `veo_${videoId}.mp4`
+          const filePath = `generated/${fileName}`
+
+          const { data, error } = await supabase.storage
+            .from(STORAGE_BUCKETS.VIDEOS)
+            .upload(filePath, videoBlob, {
+              contentType: video.mimeType || 'video/mp4',
+              cacheControl: '3600',
+              upsert: false,
+            })
+
+          if (error) {
+            console.error('[Veo] Failed to upload video to storage:', error)
+            return {
+              status: 'failed',
+              error: `Failed to upload video: ${error.message}`
+            }
+          }
+
+          // Get public URL
+          const { data: urlData } = supabase.storage
+            .from(STORAGE_BUCKETS.VIDEOS)
+            .getPublicUrl(data.path)
+
+          console.log('[Veo] Video uploaded successfully:', urlData.publicUrl)
+
+          return {
+            status: 'completed',
+            videoUrl: urlData.publicUrl,
+            thumbnailUrl: undefined,
+          }
+        } catch (uploadError) {
+          console.error('[Veo] Error uploading base64 video:', uploadError)
+          return {
+            status: 'failed',
+            error: uploadError instanceof Error ? uploadError.message : 'Failed to upload video'
+          }
         }
       }
 
