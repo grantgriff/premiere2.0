@@ -41,13 +41,21 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
   }
 
   try {
+    // Luma has a prompt length limit - truncate if needed
+    const MAX_PROMPT_LENGTH = 500  // Conservative limit
+    let prompt = params.prompt
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      console.warn(`[Luma] Prompt too long (${prompt.length} chars), truncating to ${MAX_PROMPT_LENGTH}`)
+      prompt = prompt.substring(0, MAX_PROMPT_LENGTH - 3) + '...'
+    }
+
     // Map duration to valid Luma format
     const lumaDuration = mapToLumaDuration(params.duration || 5)
 
     // Build request body matching exact API spec
     const body: Record<string, unknown> = {
       model: LUMA_MODEL,
-      prompt: params.prompt,
+      prompt: prompt,  // Use truncated prompt
       aspect_ratio: params.aspectRatio || '16:9',
       resolution: '720p',
       duration: lumaDuration,
@@ -57,6 +65,7 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
     // Add keyframes for image-to-video (style reference or character image)
     const imageUrl = params.styleReferenceUrl || params.characterReferenceUrls?.[0]
     if (imageUrl) {
+      console.log(`[Luma] Adding keyframe image: ${imageUrl.substring(0, 80)}...`)
       body.keyframes = {
         frame0: {
           type: 'image',
@@ -64,7 +73,7 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
         },
       }
       if (!params.styleReferenceUrl && params.characterReferenceUrls?.[0]) {
-        console.log(`[Luma] Using character reference image as frame0: ${imageUrl.substring(0, 60)}...`)
+        console.log(`[Luma] Using character reference image as frame0`)
       }
     }
 
@@ -86,6 +95,12 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
     console.log('[Luma] Response body:', responseText)
 
     if (!response.ok) {
+      console.error('[Luma] API request failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText,
+        requestBody: JSON.stringify(body)
+      })
       return {
         success: false,
         error: `Luma API error (${response.status}): ${responseText}`
