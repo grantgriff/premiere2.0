@@ -6,7 +6,7 @@ import { generateId } from '@/lib/utils'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, description, referenceImageUrl, thumbnailUrl } = body
+    const { userId, name, description, referenceImageUrl, thumbnailUrl, embeddingStatus } = body
 
     if (!userId || !name) {
       return NextResponse.json(
@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
       description: description || '',
       referenceImageUrl: referenceImageUrl || null,
       thumbnailUrl: thumbnailUrl || null,
+      embeddingStatus: embeddingStatus || 'pending',
     })
 
     if (!character) {
