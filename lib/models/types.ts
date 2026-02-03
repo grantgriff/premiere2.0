@@ -9,7 +9,8 @@ export interface GenerationParams {
   stylePreset?: 'realistic' | 'cinematic' | 'animated' | 'abstract'
   styleReferenceUrl?: string
   styleInfluence?: number // 0-100
-  characterReferenceUrls?: string[] // Character reference image URLs
+  characterReferenceUrls?: string[] // Character reference image URLs (HTTP)
+  characterGcsUris?: string[] // Character reference GCS URIs (for Veo)
   negativePrompt?: string
 }
 

@@ -91,17 +91,19 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
       prompt: params.prompt,
     }
 
-    // Add character reference image if provided (use first one)
-    if (params.characterReferenceUrls && params.characterReferenceUrls.length > 0) {
-      const imageUrl = params.characterReferenceUrls[0]
-      console.log(`[Veo] Adding character reference image: ${imageUrl.substring(0, 60)}...`)
+    // Add character reference image - prefer GCS URIs, fallback to HTTP URLs
+    const characterImageUri = params.characterGcsUris?.[0] || params.characterReferenceUrls?.[0]
 
-      // If it's a GCS URI, use directly; otherwise we'd need to convert
-      if (imageUrl.startsWith('gs://')) {
-        instance.image = { gcsUri: imageUrl }
+    if (characterImageUri) {
+      console.log(`[Veo] Adding character reference image: ${characterImageUri.substring(0, 80)}...`)
+
+      if (characterImageUri.startsWith('gs://')) {
+        // Perfect! GCS URI can be used directly
+        instance.image = { gcsUri: characterImageUri }
+        console.log('[Veo] Using GCS URI for character reference (optimal for Veo)')
       } else {
-        console.warn('[Veo] Image URL is not a GCS URI. Veo only supports gs:// URIs for images in Vertex AI.')
-        console.warn('[Veo] You may need to upload the image to Google Cloud Storage first.')
+        console.warn('[Veo] Image URL is not a GCS URI. Veo requires gs:// URIs in Vertex AI.')
+        console.warn('[Veo] Character reference will not be used. Make sure GOOGLE_CLOUD_STORAGE_BUCKET is configured.')
       }
     }
 

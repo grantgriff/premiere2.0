@@ -21,6 +21,7 @@ export interface DbCharacter {
   description: string
   reference_image_url: string | null
   thumbnail_url: string | null
+  gcs_image_uri: string | null // Google Cloud Storage URI for Veo API
   embedding_status: 'pending' | 'processing' | 'ready' | 'failed'
   created_at: string
   updated_at: string
@@ -58,6 +59,7 @@ export async function createCharacter(data: {
   description: string
   referenceImageUrl?: string | null
   thumbnailUrl?: string | null
+  gcsImageUri?: string | null
   embeddingStatus?: 'pending' | 'processing' | 'ready' | 'failed'
 }): Promise<DbCharacter | null> {
   const supabase = await createServerClient()
@@ -71,6 +73,7 @@ export async function createCharacter(data: {
       description: data.description,
       reference_image_url: data.referenceImageUrl || null,
       thumbnail_url: data.thumbnailUrl || null,
+      gcs_image_uri: data.gcsImageUri || null,
       embedding_status: data.embeddingStatus || 'pending',
     })
     .select()
@@ -109,6 +112,7 @@ export async function updateCharacter(
     description: string
     referenceImageUrl: string | null
     thumbnailUrl: string | null
+    gcsImageUri: string | null
     embeddingStatus: 'pending' | 'processing' | 'ready' | 'failed'
   }>
 ): Promise<DbCharacter | null> {
@@ -119,6 +123,7 @@ export async function updateCharacter(
   if (data.description !== undefined) updateData.description = data.description
   if (data.referenceImageUrl !== undefined) updateData.reference_image_url = data.referenceImageUrl
   if (data.thumbnailUrl !== undefined) updateData.thumbnail_url = data.thumbnailUrl
+  if (data.gcsImageUri !== undefined) updateData.gcs_image_uri = data.gcsImageUri
   if (data.embeddingStatus !== undefined) updateData.embedding_status = data.embeddingStatus
   updateData.updated_at = new Date().toISOString()
 

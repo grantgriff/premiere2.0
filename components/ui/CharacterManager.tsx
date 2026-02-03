@@ -19,6 +19,7 @@ import { CharacterCard } from './CharacterCard'
 import { generateId } from '@/lib/utils'
 import { useAuth } from '@/components/AuthProvider'
 import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
+import { uploadToGCS } from '@/lib/gcs'
 
 interface CharacterManagerProps {
   isOpen: boolean
