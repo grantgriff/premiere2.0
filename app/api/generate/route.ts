@@ -144,8 +144,25 @@ export async function POST(request: NextRequest) {
           console.log(`[Generate] GCS URIs (for Veo): ${characterGcsUris.join(', ')}`)
         }
         if (characterReferenceUrls.length > 0) {
-          characterReferenceUrls.forEach((url, i) => {
+          characterReferenceUrls.forEach(async (url, i) => {
             console.log(`[Generate] HTTP URL ${i + 1}: ${url.substring(0, 80)}...`)
+
+            // CRITICAL: Test if the character image URL is accessible
+            // If not, Luma/Runway/Sora will fail!
+            try {
+              const testResponse = await fetch(url, { method: 'HEAD' })
+              if (!testResponse.ok) {
+                console.error(`[Generate] ⚠️ Character image ${i + 1} is NOT accessible! Status: ${testResponse.status}`)
+                console.error(`[Generate] URL: ${url}`)
+                console.error(`[Generate] This will cause video generation to FAIL!`)
+                console.error(`[Generate] Check Supabase storage bucket permissions - bucket must be PUBLIC`)
+              } else {
+                console.log(`[Generate] ✓ Character image ${i + 1} is accessible`)
+              }
+            } catch (testError) {
+              console.error(`[Generate] ⚠️ Failed to test character image ${i + 1} accessibility:`, testError)
+              console.error(`[Generate] URL: ${url}`)
+            }
           })
         }
       }

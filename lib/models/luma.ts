@@ -159,6 +159,11 @@ export async function checkLumaStatus(jobId: string): Promise<GenerationStatus> 
           thumbnailUrl: undefined,
         }
       case 'failed':
+        console.error('[Luma] Generation failed:', {
+          jobId: data.id,
+          failureReason: data.failure_reason,
+          fullResponse: JSON.stringify(data)
+        })
         return {
           status: 'failed',
           error: data.failure_reason || 'Generation failed'
