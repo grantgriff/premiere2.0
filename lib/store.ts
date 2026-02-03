@@ -229,7 +229,23 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Characters
   characters: [],
-  setCharacters: (characters) => set({ characters }),
+  setCharacters: (characters) =>
+    set((state) => {
+      // Auto-clean stale selected character IDs
+      const validCharacterIds = new Set(characters.map(c => c.id))
+      const cleanedSelectedIds = state.selectedCharacterIds.filter(id => validCharacterIds.has(id))
+
+      // Log if we're cleaning stale IDs
+      const staleIds = state.selectedCharacterIds.filter(id => !validCharacterIds.has(id))
+      if (staleIds.length > 0) {
+        console.log(`[Store] Removing ${staleIds.length} stale character ID(s) from selection:`, staleIds)
+      }
+
+      return {
+        characters,
+        selectedCharacterIds: cleanedSelectedIds
+      }
+    }),
   addCharacter: (character) =>
     set((state) => ({
       characters: [character, ...state.characters],
@@ -247,11 +263,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
   selectedCharacterIds: [],
   toggleCharacterSelection: (id) =>
-    set((state) => ({
-      selectedCharacterIds: state.selectedCharacterIds.includes(id)
-        ? state.selectedCharacterIds.filter((cid) => cid !== id)
-        : [...state.selectedCharacterIds, id],
-    })),
+    set((state) => {
+      // Validate that the character exists before selecting
+      const characterExists = state.characters.some(c => c.id === id)
+
+      if (!characterExists && !state.selectedCharacterIds.includes(id)) {
+        console.warn(`[Store] Cannot select character ${id} - does not exist in character list`)
+        return state // No change
+      }
+
+      return {
+        selectedCharacterIds: state.selectedCharacterIds.includes(id)
+          ? state.selectedCharacterIds.filter((cid) => cid !== id)
+          : [...state.selectedCharacterIds, id],
+      }
+    }),
   clearCharacterSelection: () => set({ selectedCharacterIds: [] }),
 
   // YouTube
