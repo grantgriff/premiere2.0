@@ -214,23 +214,17 @@ export function CharacterManager({
         description: description.trim(),
         referenceImageUrl: uploadedImageUrl || imagePreview,
         thumbnailUrl: uploadedImageUrl || imagePreview,
-        embeddingStatus: 'processing',
+        embeddingStatus: 'ready', // Set to ready immediately since we have the image
         createdAt: new Date(),
         usageCount: 0,
       }
 
-      // Save to API first
+      // Save to API
       const success = await createCharacterAPI(newCharacter)
 
       if (success) {
         // Add to local store
         addCharacter(newCharacter)
-
-        // Simulate embedding processing
-        setTimeout(() => {
-          updateCharacterInStore(newCharacter.id, { embeddingStatus: 'ready' })
-          updateCharacterAPI(newCharacter.id, { embeddingStatus: 'ready' })
-        }, 3000)
       } else {
         alert('Failed to create character. Please try again.')
       }
@@ -261,7 +255,7 @@ export function CharacterManager({
       description: description.trim() || generatePrompt.trim(),
       referenceImageUrl: placeholderImage,
       thumbnailUrl: placeholderImage,
-      embeddingStatus: 'processing',
+      embeddingStatus: 'ready', // Set to ready immediately since we have the image
       createdAt: new Date(),
       usageCount: 0,
     }
@@ -271,12 +265,6 @@ export function CharacterManager({
 
     if (success) {
       addCharacter(newCharacter)
-
-      // Simulate embedding processing
-      setTimeout(() => {
-        updateCharacterInStore(newCharacter.id, { embeddingStatus: 'ready' })
-        updateCharacterAPI(newCharacter.id, { embeddingStatus: 'ready' })
-      }, 3000)
     }
 
     setIsGenerating(false)
@@ -339,7 +327,7 @@ export function CharacterManager({
           ? {
               referenceImageUrl: uploadedImageUrl || imagePreview,
               thumbnailUrl: uploadedImageUrl || imagePreview,
-              embeddingStatus: 'processing' as const,
+              embeddingStatus: 'ready' as const, // Set to ready immediately since we have the image
             }
           : {}),
       }
@@ -349,14 +337,6 @@ export function CharacterManager({
 
       if (success) {
         updateCharacterInStore(editingCharacter.id, updates)
-
-        // If image changed, simulate re-processing
-        if (uploadedImageUrl || (imagePreview && imagePreview !== editingCharacter.referenceImageUrl)) {
-          setTimeout(() => {
-            updateCharacterInStore(editingCharacter.id, { embeddingStatus: 'ready' })
-            updateCharacterAPI(editingCharacter.id, { embeddingStatus: 'ready' })
-          }, 3000)
-        }
       } else {
         alert('Failed to update character. Please try again.')
       }
