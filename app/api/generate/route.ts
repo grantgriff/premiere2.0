@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateVideo, checkGenerationStatus as checkModelStatus, MODEL_INFO, VideoModelId } from '@/lib/models'
 import { checkRateLimit } from '@/lib/queue'
-import { generateId, parseCharacterMentions } from '@/lib/utils'
+import { generateId, parseCharacterMentions, stripCharacterMentions } from '@/lib/utils'
 import { createServerClient } from '@/lib/supabase-server'
 import { enhancePromptWithGemini, getPromptToUse, Character } from '@/lib/prompt-enhancer'
 
@@ -144,8 +144,25 @@ export async function POST(request: NextRequest) {
           console.log(`[Generate] GCS URIs (for Veo): ${characterGcsUris.join(', ')}`)
         }
         if (characterReferenceUrls.length > 0) {
-          characterReferenceUrls.forEach((url, i) => {
+          characterReferenceUrls.forEach(async (url, i) => {
             console.log(`[Generate] HTTP URL ${i + 1}: ${url.substring(0, 80)}...`)
+
+            // CRITICAL: Test if the character image URL is accessible
+            // If not, Luma/Runway/Sora will fail!
+            try {
+              const testResponse = await fetch(url, { method: 'HEAD' })
+              if (!testResponse.ok) {
+                console.error(`[Generate] ⚠️ Character image ${i + 1} is NOT accessible! Status: ${testResponse.status}`)
+                console.error(`[Generate] URL: ${url}`)
+                console.error(`[Generate] This will cause video generation to FAIL!`)
+                console.error(`[Generate] Check Supabase storage bucket permissions - bucket must be PUBLIC`)
+              } else {
+                console.log(`[Generate] ✓ Character image ${i + 1} is accessible`)
+              }
+            } catch (testError) {
+              console.error(`[Generate] ⚠️ Failed to test character image ${i + 1} accessibility:`, testError)
+              console.error(`[Generate] URL: ${url}`)
+            }
           })
         }
       }
@@ -180,9 +197,17 @@ export async function POST(request: NextRequest) {
     // ===== PROMPT ENHANCEMENT WITH GEMINI 2.5 PRO =====
     // Enhance the prompt for better video generation, especially with characters
     console.log('[Generate] Enhancing prompt with Gemini 2.5 Pro...')
+    const hasCharacterImages = characterReferenceUrls.length > 0 || characterGcsUris.length > 0
+
+    // Strip @mentions from prompt before enhancement to avoid duplication
+    // Example: "generate @Grant climbing" -> "generate climbing"
+    const promptForEnhancement = stripCharacterMentions(prompt)
+    console.log('[Generate] Prompt after stripping @mentions:', promptForEnhancement)
+
     const enhancementResult = await enhancePromptWithGemini({
-      originalPrompt: prompt,
+      originalPrompt: promptForEnhancement,
       characters: characterData.length > 0 ? characterData : undefined,
+      hasCharacterImages,  // Tell the enhancer if character images will be sent
       hasStyleReference: !!primaryStyleUrl,
       styleReferenceType,
       model,
