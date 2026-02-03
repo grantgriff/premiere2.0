@@ -56,13 +56,13 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
     // Determine which endpoint to use based on input
     const hasImageInput = params.styleReferenceUrl && isImageUrl(params.styleReferenceUrl)
     const hasVideoInput = params.styleReferenceUrl && isVideoUrl(params.styleReferenceUrl)
+    const hasCharacterRef = params.characterReferenceUrls && params.characterReferenceUrls.length > 0
 
-    // Use character reference image if no style reference is provided
-    const characterImageUrl = params.characterReferenceUrls?.[0]
-    const useCharacterAsImage = !params.styleReferenceUrl && characterImageUrl
-
-    if (useCharacterAsImage) {
-      console.log(`[Runway] Using character reference image as promptImage: ${characterImageUrl.substring(0, 60)}...`)
+    // IMPORTANT: Character references should use text-to-video mode, not image-to-video
+    // Image-to-video animates the scene in the photo, not extract character appearance
+    // The enhanced prompt already describes the character in detail
+    if (hasCharacterRef) {
+      console.log(`[Runway] Character detected - using text-to-video mode with enhanced prompt (image-to-video would animate the photo scene, not extract character)`)
     }
 
     let endpoint: string
@@ -77,12 +77,12 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
         promptText: params.prompt,
         ratio: formatRatio(params.aspectRatio || '16:9'),
       }
-    } else if (hasImageInput || useCharacterAsImage) {
-      // Image-to-video (from style reference OR character image)
+    } else if (hasImageInput && !hasCharacterRef) {
+      // Image-to-video (ONLY for style references, NOT for characters)
       endpoint = `${RUNWAY_API_BASE}/image_to_video`
       requestBody = {
         model: RUNWAY_MODELS.imageToVideo,
-        promptImage: params.styleReferenceUrl || characterImageUrl,
+        promptImage: params.styleReferenceUrl,
         promptText: params.prompt,
         ratio: formatRatio(params.aspectRatio || '16:9'),
         duration: Math.min(params.duration, 10), // Gen4 max is 10s
@@ -91,7 +91,7 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
         }
       }
     } else {
-      // Text-to-video
+      // Text-to-video (used for characters or no reference)
       endpoint = `${RUNWAY_API_BASE}/text_to_video`
       const mappedDuration = mapToVeoDuration(params.duration)
       if (mappedDuration !== params.duration) {

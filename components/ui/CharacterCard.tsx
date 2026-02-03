@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   User,
   Check,
@@ -33,6 +33,18 @@ export function CharacterCard({
   compact = false,
 }: CharacterCardProps) {
   const [showMenu, setShowMenu] = useState(false)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 })
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (showMenu && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setMenuPosition({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      })
+    }
+  }, [showMenu])
 
   // Check if this is an auto-capture character (pending with no image)
   const isAwaitingCapture =
@@ -158,6 +170,7 @@ export function CharacterCard({
           {/* Menu button */}
           <div className="relative">
             <button
+              ref={buttonRef}
               onClick={(e) => {
                 e.stopPropagation()
                 setShowMenu(!showMenu)
@@ -166,40 +179,6 @@ export function CharacterCard({
             >
               <MoreVertical className="w-4 h-4" />
             </button>
-
-            {/* Dropdown menu */}
-            {showMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowMenu(false)}
-                />
-                <div className="absolute right-0 top-full mt-1 z-50 bg-background border border-border rounded-lg shadow-lg py-1 min-w-[120px]">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setShowMenu(false)
-                      onEdit()
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm text-foreground-secondary hover:bg-background-secondary hover:text-foreground flex items-center gap-2"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                    Edit
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setShowMenu(false)
-                      onDelete()
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-background-secondary flex items-center gap-2"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete
-                  </button>
-                </div>
-              </>
-            )}
           </div>
         </div>
 
@@ -216,6 +195,43 @@ export function CharacterCard({
           )}
         </div>
       </div>
+
+      {/* Dropdown menu - rendered outside card to avoid clipping */}
+      {showMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setShowMenu(false)}
+          />
+          <div
+            className="fixed z-50 bg-background border border-border rounded-lg shadow-lg py-1 min-w-[120px]"
+            style={{ top: `${menuPosition.top}px`, right: `${menuPosition.right}px` }}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowMenu(false)
+                onEdit()
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-foreground-secondary hover:bg-background-secondary hover:text-foreground flex items-center gap-2"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowMenu(false)
+                onDelete()
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-background-secondary flex items-center gap-2"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }

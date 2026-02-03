@@ -73,6 +73,15 @@ export async function generateWithSora(params: GenerationParams): Promise<Genera
     // Map aspect ratio to Sora resolution
     const size = mapAspectRatioToSize(params.aspectRatio || '16:9')
 
+    const hasCharacterRef = params.characterReferenceUrls && params.characterReferenceUrls.length > 0
+
+    // IMPORTANT: Character references should NOT use input_reference (image-to-video mode)
+    // Image-to-video animates the scene in the photo, not extract character appearance
+    // The enhanced prompt already describes the character in detail
+    if (hasCharacterRef) {
+      console.log(`[Sora] Character detected - using text-to-video mode with enhanced prompt (image-to-video would animate the photo scene, not extract character)`)
+    }
+
     // Build multipart form data
     const formData = new FormData()
     formData.append('model', SORA_MODEL)
@@ -80,12 +89,11 @@ export async function generateWithSora(params: GenerationParams): Promise<Genera
     formData.append('seconds', seconds.toString())
     formData.append('size', size)
 
-    // Add image reference (from style reference or character image)
-    const imageUrl = params.styleReferenceUrl || params.characterReferenceUrls?.[0]
-    if (imageUrl) {
+    // Add image reference ONLY for style references, NOT for characters
+    if (params.styleReferenceUrl && !hasCharacterRef) {
       try {
-        console.log(`[Sora] Fetching reference image: ${imageUrl.substring(0, 60)}...`)
-        const imageResponse = await fetch(imageUrl)
+        console.log(`[Sora] Fetching style reference image: ${params.styleReferenceUrl.substring(0, 60)}...`)
+        const imageResponse = await fetch(params.styleReferenceUrl)
         if (imageResponse.ok) {
           const imageBlob = await imageResponse.blob()
           // Determine file extension from URL or content-type
@@ -107,7 +115,7 @@ export async function generateWithSora(params: GenerationParams): Promise<Genera
       prompt: params.prompt,
       seconds,
       size,
-      hasInputReference: !!imageUrl,
+      hasInputReference: !!(params.styleReferenceUrl && !hasCharacterRef),
     })
 
     const response = await fetch(`${OPENAI_API_BASE}/videos`, {
