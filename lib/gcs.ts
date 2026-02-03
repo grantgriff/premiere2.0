@@ -1,11 +1,45 @@
 // Google Cloud Storage Upload Utility
 // Used for uploading character images so Veo can reference them
+import { GoogleAuth } from 'google-auth-library'
 
 interface GCSUploadResult {
   success: boolean
   gcsUri?: string  // gs://bucket/path format
   publicUrl?: string // https://storage.googleapis.com/bucket/path format
   error?: string
+}
+
+// Cache for auth client
+let authClientCache: GoogleAuth | null = null
+
+// Helper to get OAuth access token from Google Cloud service account
+async function getAccessToken(): Promise<string | null> {
+  try {
+    const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
+
+    if (!credentialsJson) {
+      console.error('[GCS] GOOGLE_APPLICATION_CREDENTIALS_JSON not configured')
+      return null
+    }
+
+    // Create auth client if not cached
+    if (!authClientCache) {
+      const credentials = JSON.parse(credentialsJson)
+      authClientCache = new GoogleAuth({
+        credentials,
+        scopes: ['https://www.googleapis.com/auth/devstorage.read_write'],
+      })
+    }
+
+    // Get access token
+    const client = await authClientCache.getClient()
+    const accessToken = await client.getAccessToken()
+
+    return accessToken.token || null
+  } catch (error) {
+    console.error('[GCS] Failed to get access token:', error)
+    return null
+  }
 }
 
 /**
@@ -17,7 +51,6 @@ export async function uploadToGCS(
   path: string
 ): Promise<GCSUploadResult> {
   const bucketName = process.env.GOOGLE_CLOUD_STORAGE_BUCKET || process.env.GCS_BUCKET
-  const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY
 
   if (!bucketName) {
     console.error('[GCS] GOOGLE_CLOUD_STORAGE_BUCKET not configured')
@@ -27,11 +60,12 @@ export async function uploadToGCS(
     }
   }
 
-  if (!apiKey) {
-    console.error('[GCS] Google AI API key not configured')
+  // Get OAuth2 access token from service account
+  const accessToken = await getAccessToken()
+  if (!accessToken) {
     return {
       success: false,
-      error: 'Google AI API key not configured'
+      error: 'Failed to authenticate with Google Cloud. Set GOOGLE_APPLICATION_CREDENTIALS_JSON with your service account JSON in environment variables.'
     }
   }
 
@@ -49,7 +83,7 @@ export async function uploadToGCS(
       method: 'POST',
       headers: {
         'Content-Type': file.type || 'application/octet-stream',
-        'x-goog-api-key': apiKey,
+        'Authorization': `Bearer ${accessToken}`,
       },
       body: file,
     })
@@ -72,7 +106,7 @@ export async function uploadToGCS(
       if (response.status === 403) {
         return {
           success: false,
-          error: 'GCS access denied. Make sure your API key has permission to upload to the bucket.'
+          error: 'GCS access denied. Make sure your service account has permission to upload to the bucket.'
         }
       }
 
@@ -108,10 +142,16 @@ export async function uploadToGCS(
  */
 export async function deleteFromGCS(gcsUri: string): Promise<boolean> {
   const bucketName = process.env.GOOGLE_CLOUD_STORAGE_BUCKET || process.env.GCS_BUCKET
-  const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY
 
-  if (!bucketName || !apiKey) {
-    console.error('[GCS] Configuration missing')
+  if (!bucketName) {
+    console.error('[GCS] GOOGLE_CLOUD_STORAGE_BUCKET not configured')
+    return false
+  }
+
+  // Get OAuth2 access token from service account
+  const accessToken = await getAccessToken()
+  if (!accessToken) {
+    console.error('[GCS] Failed to authenticate for delete operation')
     return false
   }
 
@@ -134,7 +174,7 @@ export async function deleteFromGCS(gcsUri: string): Promise<boolean> {
     const response = await fetch(deleteUrl, {
       method: 'DELETE',
       headers: {
-        'x-goog-api-key': apiKey,
+        'Authorization': `Bearer ${accessToken}`,
       },
     })
 
