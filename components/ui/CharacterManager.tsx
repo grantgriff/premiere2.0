@@ -19,6 +19,7 @@ import { CharacterCard } from './CharacterCard'
 import { generateId } from '@/lib/utils'
 import { useAuth } from '@/components/AuthProvider'
 import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
+import { resizeImageForVideo, VIDEO_DIMENSIONS } from '@/lib/image-utils'
 import { uploadToGCS } from '@/lib/gcs'
 
 interface CharacterManagerProps {
@@ -199,8 +200,15 @@ export function CharacterManager({
       // Upload image to Supabase storage if a file was selected
       let uploadedImageUrl: string | null = null
       if (imageFile) {
+        // Resize image to standard video dimensions (1280x720) for compatibility with Sora/Luma/Runway
+        console.log(`[CharacterManager] Resizing image to ${VIDEO_DIMENSIONS.width}x${VIDEO_DIMENSIONS.height} for video generation compatibility...`)
+        const resizedImageBlob = await resizeImageForVideo(imageFile)
+
+        // Convert Blob to File for upload
+        const resizedFile = new File([resizedImageBlob], imageFile.name, { type: 'image/jpeg' })
+
         const path = `${user.id}/${generateId()}_${imageFile.name}`
-        uploadedImageUrl = await uploadToStorage(STORAGE_BUCKETS.IMAGES, path, imageFile)
+        uploadedImageUrl = await uploadToStorage(STORAGE_BUCKETS.IMAGES, path, resizedFile)
 
         if (!uploadedImageUrl) {
           console.error('Failed to upload character image')
@@ -208,6 +216,8 @@ export function CharacterManager({
           setIsUploading(false)
           return
         }
+
+        console.log(`[CharacterManager] ✓ Character image uploaded and resized to ${VIDEO_DIMENSIONS.width}x${VIDEO_DIMENSIONS.height}`)
       }
 
       const newCharacter: Character = {
@@ -314,8 +324,15 @@ export function CharacterManager({
       // Upload new image to Supabase storage if a file was selected
       let uploadedImageUrl: string | null = null
       if (imageFile) {
+        // Resize image to standard video dimensions (1280x720)
+        console.log(`[CharacterManager] Resizing updated image to ${VIDEO_DIMENSIONS.width}x${VIDEO_DIMENSIONS.height}...`)
+        const resizedImageBlob = await resizeImageForVideo(imageFile)
+
+        // Convert Blob to File for upload
+        const resizedFile = new File([resizedImageBlob], imageFile.name, { type: 'image/jpeg' })
+
         const path = `${user.id}/${generateId()}_${imageFile.name}`
-        uploadedImageUrl = await uploadToStorage(STORAGE_BUCKETS.IMAGES, path, imageFile)
+        uploadedImageUrl = await uploadToStorage(STORAGE_BUCKETS.IMAGES, path, resizedFile)
 
         if (!uploadedImageUrl) {
           console.error('Failed to upload character image')
@@ -323,6 +340,8 @@ export function CharacterManager({
           setIsUploading(false)
           return
         }
+
+        console.log(`[CharacterManager] ✓ Updated character image resized to ${VIDEO_DIMENSIONS.width}x${VIDEO_DIMENSIONS.height}`)
       }
 
       const updates: Partial<Character> = {

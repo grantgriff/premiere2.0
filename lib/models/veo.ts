@@ -1,24 +1,45 @@
 // Google Veo 3.1 API Integration (Vertex AI)
 // Docs: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo
 import { GenerationParams, GenerationResult, GenerationStatus } from './types'
+import { GoogleAuth } from 'google-auth-library'
+import { supabase, getSupabaseAdmin, STORAGE_BUCKETS } from '../supabase'
+import { generateId } from '../utils'
 
 // Vertex AI endpoints
 const VERTEX_AI_REGION = 'us-central1'
 const VEO_MODEL = 'veo-3.1-fast-generate-001'
 
-// Helper to get OAuth access token from Google Cloud
+// Cache for auth client
+let authClientCache: GoogleAuth | null = null
+
+// Helper to get OAuth access token from Google Cloud service account
 async function getAccessToken(): Promise<string | null> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY
+  try {
+    const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
 
-  // For now, we'll use API keys as a workaround since Vertex AI OAuth is complex
-  // In production, you'd want to use service account JSON or application default credentials
-  if (apiKey) {
-    // Try to exchange API key for access token (this is a fallback)
-    return apiKey
+    if (!credentialsJson) {
+      console.error('[Veo] GOOGLE_APPLICATION_CREDENTIALS_JSON not configured')
+      return null
+    }
+
+    // Create auth client if not cached
+    if (!authClientCache) {
+      const credentials = JSON.parse(credentialsJson)
+      authClientCache = new GoogleAuth({
+        credentials,
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+      })
+    }
+
+    // Get access token
+    const client = await authClientCache.getClient()
+    const accessToken = await client.getAccessToken()
+
+    return accessToken.token || null
+  } catch (error) {
+    console.error('[Veo] Failed to get access token:', error)
+    return null
   }
-
-  console.error('[Veo] No authentication method available')
-  return null
 }
 
 function getVertexEndpoint(projectId: string): string {
@@ -66,8 +87,7 @@ interface VertexOperationResponse {
 }
 
 export async function generateWithVeo(params: GenerationParams): Promise<GenerationResult> {
-  const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID
-  const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY
+  const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT
 
   if (!projectId) {
     return {
@@ -76,10 +96,12 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
     }
   }
 
-  if (!apiKey) {
+  // Get OAuth2 access token from service account
+  const accessToken = await getAccessToken()
+  if (!accessToken) {
     return {
       success: false,
-      error: 'Google AI API key not configured. Set GOOGLE_AI_API_KEY in environment variables.'
+      error: 'Failed to authenticate with Google Cloud. Set GOOGLE_APPLICATION_CREDENTIALS_JSON with your service account JSON in environment variables.'
     }
   }
 
@@ -129,7 +151,7 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey, // Using API key for now
+        'Authorization': `Bearer ${accessToken}`,
       },
       body: JSON.stringify(requestBody),
     })
@@ -199,13 +221,21 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
 }
 
 export async function checkVeoStatus(operationName: string): Promise<GenerationStatus> {
-  const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID
-  const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY
+  const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT
 
-  if (!projectId || !apiKey) {
+  if (!projectId) {
     return {
       status: 'failed',
-      error: 'Missing Google Cloud project ID or API key'
+      error: 'Missing Google Cloud project ID'
+    }
+  }
+
+  // Get OAuth2 access token
+  const accessToken = await getAccessToken()
+  if (!accessToken) {
+    return {
+      status: 'failed',
+      error: 'Failed to authenticate with Google Cloud'
     }
   }
 
@@ -217,7 +247,7 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
+        'Authorization': `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
         operationName: operationName,
@@ -258,11 +288,60 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
           thumbnailUrl: undefined,
         }
       } else if (video.bytesBase64Encoded) {
-        // Video returned as base64 - need to upload to your storage
-        console.log('[Veo] Video returned as base64, needs to be uploaded')
-        return {
-          status: 'failed',
-          error: 'Veo returned base64 video - need to implement upload to storage'
+        // Video returned as base64 - upload to Supabase storage
+        console.log('[Veo] Video returned as base64, uploading to Supabase storage...')
+
+        try {
+          // Convert base64 to Blob
+          const base64Data = video.bytesBase64Encoded
+          const binaryString = atob(base64Data)
+          const bytes = new Uint8Array(binaryString.length)
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i)
+          }
+          const videoBlob = new Blob([bytes], { type: video.mimeType || 'video/mp4' })
+
+          // Upload to Supabase storage using admin client (bypasses RLS)
+          const videoId = generateId()
+          const fileName = `veo_${videoId}.mp4`
+          const filePath = `generated/${fileName}`
+
+          console.log('[Veo] Uploading to Supabase storage with admin client...')
+          const supabaseAdmin = getSupabaseAdmin()
+          const { data, error } = await supabaseAdmin.storage
+            .from(STORAGE_BUCKETS.VIDEOS)
+            .upload(filePath, videoBlob, {
+              contentType: video.mimeType || 'video/mp4',
+              cacheControl: '3600',
+              upsert: false,
+            })
+
+          if (error) {
+            console.error('[Veo] Failed to upload video to storage:', error)
+            return {
+              status: 'failed',
+              error: `Failed to upload video: ${error.message}`
+            }
+          }
+
+          // Get public URL
+          const { data: urlData } = supabaseAdmin.storage
+            .from(STORAGE_BUCKETS.VIDEOS)
+            .getPublicUrl(data.path)
+
+          console.log('[Veo] Video uploaded successfully:', urlData.publicUrl)
+
+          return {
+            status: 'completed',
+            videoUrl: urlData.publicUrl,
+            thumbnailUrl: undefined,
+          }
+        } catch (uploadError) {
+          console.error('[Veo] Error uploading base64 video:', uploadError)
+          return {
+            status: 'failed',
+            error: uploadError instanceof Error ? uploadError.message : 'Failed to upload video'
+          }
         }
       }
 

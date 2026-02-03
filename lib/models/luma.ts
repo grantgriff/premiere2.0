@@ -41,6 +41,14 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
   }
 
   try {
+    // Luma has a prompt length limit - truncate if needed
+    const MAX_PROMPT_LENGTH = 500  // Conservative limit
+    let prompt = params.prompt
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      console.warn(`[Luma] Prompt too long (${prompt.length} chars), truncating to ${MAX_PROMPT_LENGTH}`)
+      prompt = prompt.substring(0, MAX_PROMPT_LENGTH - 3) + '...'
+    }
+
     // Map duration to valid Luma format
     const lumaDuration = mapToLumaDuration(params.duration || 5)
 
@@ -56,7 +64,7 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
     // Build request body matching exact API spec
     const body: Record<string, unknown> = {
       model: LUMA_MODEL,
-      prompt: params.prompt,
+      prompt: prompt,  // Use truncated prompt
       aspect_ratio: params.aspectRatio || '16:9',
       resolution: '720p',
       duration: lumaDuration,
@@ -92,6 +100,12 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
     console.log('[Luma] Response body:', responseText)
 
     if (!response.ok) {
+      console.error('[Luma] API request failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText,
+        requestBody: JSON.stringify(body)
+      })
       return {
         success: false,
         error: `Luma API error (${response.status}): ${responseText}`
@@ -150,6 +164,11 @@ export async function checkLumaStatus(jobId: string): Promise<GenerationStatus> 
           thumbnailUrl: undefined,
         }
       case 'failed':
+        console.error('[Luma] Generation failed:', {
+          jobId: data.id,
+          failureReason: data.failure_reason,
+          fullResponse: JSON.stringify(data)
+        })
         return {
           status: 'failed',
           error: data.failure_reason || 'Generation failed'

@@ -115,7 +115,7 @@ export async function generateWithSora(params: GenerationParams): Promise<Genera
       prompt: params.prompt,
       seconds,
       size,
-      hasInputReference: !!imageUrl,
+      hasInputReference: !!(params.styleReferenceUrl && !hasCharacterRef),
     })
 
     const response = await fetch(`${OPENAI_API_BASE}/videos`, {

@@ -43,6 +43,11 @@ export function parseCharacterMentions(prompt: string): string[] {
   return matches ? matches.map((m) => m.slice(1)) : []
 }
 
+// Remove @character mentions from prompt (for enhancement)
+export function stripCharacterMentions(prompt: string): string {
+  return prompt.replace(/@\w+/g, '').replace(/\s+/g, ' ').trim()
+}
+
 // Validate video duration (accepts any duration allowed by any model)
 export function isValidDuration(duration: number): boolean {
   // All possible durations across all video models:
