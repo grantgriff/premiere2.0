@@ -180,9 +180,11 @@ export async function POST(request: NextRequest) {
     // ===== PROMPT ENHANCEMENT WITH GEMINI 2.5 PRO =====
     // Enhance the prompt for better video generation, especially with characters
     console.log('[Generate] Enhancing prompt with Gemini 2.5 Pro...')
+    const hasCharacterImages = characterReferenceUrls.length > 0 || characterGcsUris.length > 0
     const enhancementResult = await enhancePromptWithGemini({
       originalPrompt: prompt,
       characters: characterData.length > 0 ? characterData : undefined,
+      hasCharacterImages,  // Tell the enhancer if character images will be sent
       hasStyleReference: !!primaryStyleUrl,
       styleReferenceType,
       model,

@@ -14,6 +14,7 @@ export interface Character {
 export interface PromptEnhancementParams {
   originalPrompt: string
   characters?: Character[]
+  hasCharacterImages?: boolean  // NEW: Indicates if character images will be sent to the model
   hasStyleReference?: boolean
   styleReferenceType?: 'image' | 'video'
   model: string
@@ -80,7 +81,7 @@ ${params.hasStyleReference ? `- Style reference: ${params.styleReferenceType} (w
 
 Please enhance this prompt following these guidelines:
 
-1. ${hasCharacters ? `START the prompt by identifying the character(s) by name (e.g., "A video of ${params.characters![0].name}...")` : 'Keep the core action/scene from the original prompt'}
+1. ${hasCharacters && params.hasCharacterImages ? `The character ${params.characters![0].name} is visible in the provided image. Focus your prompt on MOTION, ACTION, and CAMERA MOVEMENT rather than describing the character's appearance. Start with "${params.characters![0].name} [action verb]..." and emphasize what happens, not what the character looks like. Example: "${params.characters![0].name} dances gracefully through rain puddles, spinning and leaping..." NOT "A video of ${params.characters![0].name}, a magical fox with glowing fur, dancing..."` : hasCharacters ? `START the prompt by identifying the character(s) by name and brief description (e.g., "A video of ${params.characters![0].name}, ${params.characters![0].description}, dancing...")` : 'Keep the core action/scene from the original prompt'}
 
 2. Add rich visual details:
    - Camera movement and angles
