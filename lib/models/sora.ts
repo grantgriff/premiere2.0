@@ -9,8 +9,19 @@ const SORA_MODEL = 'sora-2'
 // Supabase client for uploading videos
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  // Support both old and new naming conventions for Supabase keys
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
   if (!supabaseUrl || !supabaseKey) {
+    console.error('[Sora] Missing Supabase configuration:', {
+      hasUrl: !!supabaseUrl,
+      hasKey: !!supabaseKey,
+      checkedVars: ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY']
+    })
     return null
   }
   return createClient(supabaseUrl, supabaseKey)
