@@ -129,6 +129,8 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
     }
 
     console.log('[Veo] Request:', JSON.stringify(request, null, 2))
+    console.log(`[Veo] API Endpoint: ${VEO_API_BASE}/models/${VEO_MODEL}:generateVideos`)
+    console.log(`[Veo] API Key present: ${!!apiKey}, length: ${apiKey?.length}`)
 
     const response = await fetch(
       `${VEO_API_BASE}/models/${VEO_MODEL}:generateVideos`,
@@ -144,7 +146,12 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('Veo API error response:', response.status, errorText)
+      console.error('[Veo] API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+        url: response.url,
+      })
 
       if (response.status === 403) {
         return { success: false, error: 'Veo API access denied. Make sure billing is enabled and Veo API is enabled in your Google Cloud project.' }
