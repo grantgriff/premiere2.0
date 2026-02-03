@@ -108,6 +108,7 @@ export function CharacterManager({
           description: character.description,
           referenceImageUrl: character.referenceImageUrl,
           thumbnailUrl: character.thumbnailUrl,
+          embeddingStatus: character.embeddingStatus,
         }),
       })
       return response.ok

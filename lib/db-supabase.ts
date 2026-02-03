@@ -58,6 +58,7 @@ export async function createCharacter(data: {
   description: string
   referenceImageUrl?: string | null
   thumbnailUrl?: string | null
+  embeddingStatus?: 'pending' | 'processing' | 'ready' | 'failed'
 }): Promise<DbCharacter | null> {
   const supabase = await createServerClient()
 
@@ -70,7 +71,7 @@ export async function createCharacter(data: {
       description: data.description,
       reference_image_url: data.referenceImageUrl || null,
       thumbnail_url: data.thumbnailUrl || null,
-      embedding_status: 'pending',
+      embedding_status: data.embeddingStatus || 'pending',
     })
     .select()
     .single()
