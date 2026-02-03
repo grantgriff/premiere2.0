@@ -86,6 +86,9 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
         promptText: params.prompt,
         ratio: formatRatio(params.aspectRatio || '16:9'),
         duration: Math.min(params.duration, 10), // Gen4 max is 10s
+        contentModeration: {
+          publicFigureThreshold: 'low'  // Less strict about characters that may look like public figures
+        }
       }
     } else {
       // Text-to-video
