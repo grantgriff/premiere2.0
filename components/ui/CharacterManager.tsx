@@ -18,6 +18,7 @@ import { useAppStore, Character } from '@/lib/store'
 import { CharacterCard } from './CharacterCard'
 import { generateId } from '@/lib/utils'
 import { useAuth } from '@/components/AuthProvider'
+import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
 
 interface CharacterManagerProps {
   isOpen: boolean
@@ -192,29 +193,50 @@ export function CharacterManager({
 
     setIsUploading(true)
 
-    const newCharacter: Character = {
-      id: generateId(),
-      name: name.trim(),
-      description: description.trim(),
-      referenceImageUrl: imagePreview,
-      thumbnailUrl: imagePreview,
-      embeddingStatus: 'processing',
-      createdAt: new Date(),
-      usageCount: 0,
-    }
+    try {
+      // Upload image to Supabase storage if a file was selected
+      let uploadedImageUrl: string | null = null
+      if (imageFile) {
+        const path = `${user.id}/${generateId()}_${imageFile.name}`
+        uploadedImageUrl = await uploadToStorage(STORAGE_BUCKETS.IMAGES, path, imageFile)
 
-    // Save to API first
-    const success = await createCharacterAPI(newCharacter)
+        if (!uploadedImageUrl) {
+          console.error('Failed to upload character image')
+          alert('Failed to upload image. Please try again.')
+          setIsUploading(false)
+          return
+        }
+      }
 
-    if (success) {
-      // Add to local store
-      addCharacter(newCharacter)
+      const newCharacter: Character = {
+        id: generateId(),
+        name: name.trim(),
+        description: description.trim(),
+        referenceImageUrl: uploadedImageUrl || imagePreview,
+        thumbnailUrl: uploadedImageUrl || imagePreview,
+        embeddingStatus: 'processing',
+        createdAt: new Date(),
+        usageCount: 0,
+      }
 
-      // Simulate embedding processing
-      setTimeout(() => {
-        updateCharacterInStore(newCharacter.id, { embeddingStatus: 'ready' })
-        updateCharacterAPI(newCharacter.id, { embeddingStatus: 'ready' })
-      }, 3000)
+      // Save to API first
+      const success = await createCharacterAPI(newCharacter)
+
+      if (success) {
+        // Add to local store
+        addCharacter(newCharacter)
+
+        // Simulate embedding processing
+        setTimeout(() => {
+          updateCharacterInStore(newCharacter.id, { embeddingStatus: 'ready' })
+          updateCharacterAPI(newCharacter.id, { embeddingStatus: 'ready' })
+        }, 3000)
+      } else {
+        alert('Failed to create character. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error creating character:', error)
+      alert('Failed to create character. Please try again.')
     }
 
     setIsUploading(false)
@@ -295,31 +317,52 @@ export function CharacterManager({
 
     setIsUploading(true)
 
-    const updates: Partial<Character> = {
-      name: name.trim(),
-      description: description.trim(),
-      ...(imagePreview && imagePreview !== editingCharacter.referenceImageUrl
-        ? {
-            referenceImageUrl: imagePreview,
-            thumbnailUrl: imagePreview,
-            embeddingStatus: 'processing' as const,
-          }
-        : {}),
-    }
+    try {
+      // Upload new image to Supabase storage if a file was selected
+      let uploadedImageUrl: string | null = null
+      if (imageFile) {
+        const path = `${user.id}/${generateId()}_${imageFile.name}`
+        uploadedImageUrl = await uploadToStorage(STORAGE_BUCKETS.IMAGES, path, imageFile)
 
-    // Save to API
-    const success = await updateCharacterAPI(editingCharacter.id, updates)
-
-    if (success) {
-      updateCharacterInStore(editingCharacter.id, updates)
-
-      // If image changed, simulate re-processing
-      if (imagePreview && imagePreview !== editingCharacter.referenceImageUrl) {
-        setTimeout(() => {
-          updateCharacterInStore(editingCharacter.id, { embeddingStatus: 'ready' })
-          updateCharacterAPI(editingCharacter.id, { embeddingStatus: 'ready' })
-        }, 3000)
+        if (!uploadedImageUrl) {
+          console.error('Failed to upload character image')
+          alert('Failed to upload image. Please try again.')
+          setIsUploading(false)
+          return
+        }
       }
+
+      const updates: Partial<Character> = {
+        name: name.trim(),
+        description: description.trim(),
+        ...(uploadedImageUrl || (imagePreview && imagePreview !== editingCharacter.referenceImageUrl)
+          ? {
+              referenceImageUrl: uploadedImageUrl || imagePreview,
+              thumbnailUrl: uploadedImageUrl || imagePreview,
+              embeddingStatus: 'processing' as const,
+            }
+          : {}),
+      }
+
+      // Save to API
+      const success = await updateCharacterAPI(editingCharacter.id, updates)
+
+      if (success) {
+        updateCharacterInStore(editingCharacter.id, updates)
+
+        // If image changed, simulate re-processing
+        if (uploadedImageUrl || (imagePreview && imagePreview !== editingCharacter.referenceImageUrl)) {
+          setTimeout(() => {
+            updateCharacterInStore(editingCharacter.id, { embeddingStatus: 'ready' })
+            updateCharacterAPI(editingCharacter.id, { embeddingStatus: 'ready' })
+          }, 3000)
+        }
+      } else {
+        alert('Failed to update character. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error updating character:', error)
+      alert('Failed to update character. Please try again.')
     }
 
     setIsUploading(false)
