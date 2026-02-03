@@ -80,22 +80,16 @@ export async function generateWithRunway(params: GenerationParams): Promise<Gene
     } else if (hasImageInput || useCharacterAsImage) {
       // Image-to-video (from style reference OR character image)
       endpoint = `${RUNWAY_API_BASE}/image_to_video`
-      const baseRequestBody: Record<string, unknown> = {
+      requestBody = {
         model: RUNWAY_MODELS.imageToVideo,
         promptImage: params.styleReferenceUrl || characterImageUrl,
         promptText: params.prompt,
         ratio: formatRatio(params.aspectRatio || '16:9'),
         duration: Math.min(params.duration, 10), // Gen4 max is 10s
+        contentModeration: {
+          publicFigureThreshold: 'low'  // Less strict for character recognition
+        }
       }
-
-      // Only add contentModeration for models that support it (veo3.1, not gen4_turbo)
-      // if (RUNWAY_MODELS.imageToVideo.includes('veo')) {
-      //   baseRequestBody.contentModeration = {
-      //     publicFigureThreshold: 'low'
-      //   }
-      // }
-
-      requestBody = baseRequestBody
     } else {
       // Text-to-video
       endpoint = `${RUNWAY_API_BASE}/text_to_video`
