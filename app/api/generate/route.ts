@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateVideo, checkGenerationStatus as checkModelStatus, MODEL_INFO, VideoModelId } from '@/lib/models'
 import { checkRateLimit } from '@/lib/queue'
-import { generateId, parseCharacterMentions } from '@/lib/utils'
+import { generateId, parseCharacterMentions, stripCharacterMentions } from '@/lib/utils'
 import { createServerClient } from '@/lib/supabase-server'
 import { enhancePromptWithGemini, getPromptToUse, Character } from '@/lib/prompt-enhancer'
 
@@ -181,8 +181,14 @@ export async function POST(request: NextRequest) {
     // Enhance the prompt for better video generation, especially with characters
     console.log('[Generate] Enhancing prompt with Gemini 2.5 Pro...')
     const hasCharacterImages = characterReferenceUrls.length > 0 || characterGcsUris.length > 0
+
+    // Strip @mentions from prompt before enhancement to avoid duplication
+    // Example: "generate @Grant climbing" -> "generate climbing"
+    const promptForEnhancement = stripCharacterMentions(prompt)
+    console.log('[Generate] Prompt after stripping @mentions:', promptForEnhancement)
+
     const enhancementResult = await enhancePromptWithGemini({
-      originalPrompt: prompt,
+      originalPrompt: promptForEnhancement,
       characters: characterData.length > 0 ? characterData : undefined,
       hasCharacterImages,  // Tell the enhancer if character images will be sent
       hasStyleReference: !!primaryStyleUrl,

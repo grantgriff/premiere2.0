@@ -192,9 +192,16 @@ export async function checkRunwayStatus(taskId: string): Promise<GenerationStatu
           thumbnailUrl: undefined, // Runway doesn't provide separate thumbnail
         }
       case 'FAILED':
+        const errorMessage = data.failure || data.failureCode || 'Generation failed'
+        console.error('[Runway] Task failed:', {
+          taskId: data.id,
+          failure: data.failure,
+          failureCode: data.failureCode,
+          fullResponse: JSON.stringify(data)
+        })
         return {
           status: 'failed',
-          error: data.failure || data.failureCode || 'Generation failed'
+          error: `Runway generation failed: ${errorMessage}`
         }
       case 'RUNNING':
         return { status: 'processing' }

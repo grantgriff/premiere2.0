@@ -81,7 +81,7 @@ ${params.hasStyleReference ? `- Style reference: ${params.styleReferenceType} (w
 
 Please enhance this prompt following these guidelines:
 
-1. ${hasCharacters && params.hasCharacterImages ? `The character ${params.characters![0].name} is visible in the provided image. Focus your prompt on MOTION, ACTION, and CAMERA MOVEMENT rather than describing the character's appearance. Start with "${params.characters![0].name} [action verb]..." and emphasize what happens, not what the character looks like. Example: "${params.characters![0].name} dances gracefully through rain puddles, spinning and leaping..." NOT "A video of ${params.characters![0].name}, a magical fox with glowing fur, dancing..."` : hasCharacters ? `START the prompt by identifying the character(s) by name and brief description (e.g., "A video of ${params.characters![0].name}, ${params.characters![0].description}, dancing...")` : 'Keep the core action/scene from the original prompt'}
+1. ${hasCharacters && params.hasCharacterImages ? `CRITICAL: The character ${params.characters![0].name} is already visible in the provided reference image. DO NOT describe their appearance, clothing, facial features, or physical attributes. ONLY describe MOTION, ACTION, and CAMERA MOVEMENT. Start with "${params.characters![0].name} [action verb]..." Format: "${params.characters![0].name} climbs the mountain, reaching up..." NOT "A video of ${params.characters![0].name} climbing..." and NEVER "Match the appearance/clothing/face from the image"` : hasCharacters ? `Include character identity: "A video of ${params.characters![0].name}, ${params.characters![0].description}, [action]..."` : 'Keep the core action/scene from the original prompt'}
 
 2. Add rich visual details:
    - Camera movement and angles
