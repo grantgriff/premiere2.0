@@ -4,6 +4,7 @@ import { generateVideo, checkGenerationStatus as checkModelStatus, MODEL_INFO, V
 import { checkRateLimit } from '@/lib/queue'
 import { generateId, parseCharacterMentions } from '@/lib/utils'
 import { createServerClient } from '@/lib/supabase-server'
+import { enhancePromptWithGemini, getPromptToUse, Character } from '@/lib/prompt-enhancer'
 
 // Store active generation jobs for status polling
 // Maps internal videoId to external model job info
@@ -113,18 +114,22 @@ export async function POST(request: NextRequest) {
     // Fetch character reference images if characters are selected
     let characterReferenceUrls: string[] = []
     let characterGcsUris: string[] = []
+    let characterData: Character[] = []
     if (characterIds && characterIds.length > 0) {
       console.log(`[Generate] Fetching ${characterIds.length} character(s):`, characterIds)
 
       const { data: characters, error: charError } = await supabase
         .from('characters')
-        .select('id, name, reference_image_url, gcs_image_uri')
+        .select('id, name, description, reference_image_url, gcs_image_uri')
         .in('id', characterIds)
         .eq('user_id', userId)
 
       if (charError) {
         console.error('[Generate] Error fetching characters:', charError)
       } else if (characters && characters.length > 0) {
+        // Store character data for prompt enhancement
+        characterData = characters as Character[]
+
         // Extract both GCS URIs (for Veo) and HTTP URLs (for Luma/Runway/Sora)
         characterGcsUris = characters
           .map(c => c.gcs_image_uri)
@@ -143,6 +148,59 @@ export async function POST(request: NextRequest) {
             console.log(`[Generate] HTTP URL ${i + 1}: ${url.substring(0, 80)}...`)
           })
         }
+      }
+    }
+
+    // Determine the primary style reference (image or video URL)
+    // styleReferences contains typed references: { type: 'youtube' | 'upload' | 'url', url, title? }
+    let primaryStyleUrl: string | undefined
+    let styleReferenceType: 'image' | 'video' | undefined
+    if (styleReferences && styleReferences.length > 0) {
+      // Use the first uploaded/URL reference (prioritize direct uploads over YouTube)
+      const directRef = styleReferences.find((r: { type: string; url: string }) =>
+        r.type === 'upload' || r.type === 'url'
+      )
+      primaryStyleUrl = directRef?.url || styleReferences[0]?.url
+
+      // Detect if it's an image or video based on URL
+      if (primaryStyleUrl) {
+        const isImage = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(primaryStyleUrl)
+        const isVideo = /\.(mp4|mov|avi|webm|mkv)$/i.test(primaryStyleUrl) || primaryStyleUrl.includes('youtube')
+        styleReferenceType = isImage ? 'image' : isVideo ? 'video' : undefined
+      }
+    } else if (styleReferenceUrls && styleReferenceUrls.length > 0) {
+      primaryStyleUrl = styleReferenceUrls[0]
+      if (primaryStyleUrl) {
+        const isImage = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(primaryStyleUrl)
+        const isVideo = /\.(mp4|mov|avi|webm|mkv)$/i.test(primaryStyleUrl)
+        styleReferenceType = isImage ? 'image' : isVideo ? 'video' : undefined
+      }
+    }
+
+    // ===== PROMPT ENHANCEMENT WITH GEMINI 2.5 PRO =====
+    // Enhance the prompt for better video generation, especially with characters
+    console.log('[Generate] Enhancing prompt with Gemini 2.5 Pro...')
+    const enhancementResult = await enhancePromptWithGemini({
+      originalPrompt: prompt,
+      characters: characterData.length > 0 ? characterData : undefined,
+      hasStyleReference: !!primaryStyleUrl,
+      styleReferenceType,
+      model,
+      duration,
+      aspectRatio: '16:9',
+    })
+
+    // Use enhanced prompt if available, otherwise fallback to original
+    const promptToUse = getPromptToUse(enhancementResult)
+
+    if (enhancementResult.success) {
+      console.log('[Generate] ✓ Prompt enhanced successfully')
+      console.log('[Generate] Original:', prompt)
+      console.log('[Generate] Enhanced:', promptToUse)
+    } else {
+      console.log('[Generate] ⚠ Prompt enhancement failed, using original prompt')
+      if (enhancementResult.error) {
+        console.log('[Generate] Enhancement error:', enhancementResult.error)
       }
     }
 
@@ -166,6 +224,9 @@ export async function POST(request: NextRequest) {
             mentionedCharacters,
             styleReferences: styleReferences || [],
             requestedAt: new Date().toISOString(),
+            originalPrompt: prompt,
+            enhancedPrompt: enhancementResult.success ? promptToUse : undefined,
+            promptEnhancementUsed: enhancementResult.success,
           }),
         },
       })
@@ -179,19 +240,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Determine the primary style reference (image or video URL)
-    // styleReferences contains typed references: { type: 'youtube' | 'upload' | 'url', url, title? }
-    let primaryStyleUrl: string | undefined
-    if (styleReferences && styleReferences.length > 0) {
-      // Use the first uploaded/URL reference (prioritize direct uploads over YouTube)
-      const directRef = styleReferences.find((r: { type: string; url: string }) =>
-        r.type === 'upload' || r.type === 'url'
-      )
-      primaryStyleUrl = directRef?.url || styleReferences[0]?.url
-    } else if (styleReferenceUrls && styleReferenceUrls.length > 0) {
-      primaryStyleUrl = styleReferenceUrls[0]
-    }
-
     // Actually call the video generation API
     console.log(`[Generate] Starting ${model} generation for video ${videoId}`)
     console.log(`[Generate] Style reference: ${primaryStyleUrl || 'none'}`)
@@ -199,7 +247,7 @@ export async function POST(request: NextRequest) {
     console.log(`[Generate] Character GCS URIs: ${characterGcsUris.length > 0 ? characterGcsUris.length : 'none'}`)
 
     const genResult = await generateVideo(model as VideoModelId, {
-      prompt,
+      prompt: promptToUse, // Use the enhanced prompt here
       duration,
       aspectRatio: '16:9',
       styleReferenceUrl: primaryStyleUrl,
