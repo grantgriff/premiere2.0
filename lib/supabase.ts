@@ -8,11 +8,40 @@ export const getPublicKey = () =>
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
+export const getServiceRoleKey = () =>
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
 // Server-side Supabase client (basic, no auth context - for client uploads etc)
 export const supabase = createClient(
   getSupabaseUrl(),
   getPublicKey()
 )
+
+// Service role client for backend operations (bypasses RLS)
+// Lazily initialized to avoid build errors when env var not available
+let _supabaseAdmin: SupabaseClient | null = null
+
+export const getSupabaseAdmin = (): SupabaseClient => {
+  if (_supabaseAdmin) return _supabaseAdmin
+
+  const serviceRoleKey = getServiceRoleKey()
+  if (!serviceRoleKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is required for admin operations')
+  }
+
+  _supabaseAdmin = createClient(
+    getSupabaseUrl(),
+    serviceRoleKey,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      }
+    }
+  )
+
+  return _supabaseAdmin
+}
 
 // Singleton browser client - stored globally to prevent multiple instances
 let browserClient: SupabaseClient | null = null
