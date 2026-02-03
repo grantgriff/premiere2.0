@@ -2,7 +2,7 @@
 // Docs: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo
 import { GenerationParams, GenerationResult, GenerationStatus } from './types'
 import { GoogleAuth } from 'google-auth-library'
-import { supabase, STORAGE_BUCKETS } from '../supabase'
+import { supabase, supabaseAdmin, STORAGE_BUCKETS } from '../supabase'
 import { generateId } from '../utils'
 
 // Vertex AI endpoints
@@ -301,12 +301,13 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
           }
           const videoBlob = new Blob([bytes], { type: video.mimeType || 'video/mp4' })
 
-          // Upload to Supabase storage
+          // Upload to Supabase storage using admin client (bypasses RLS)
           const videoId = generateId()
           const fileName = `veo_${videoId}.mp4`
           const filePath = `generated/${fileName}`
 
-          const { data, error } = await supabase.storage
+          console.log('[Veo] Uploading to Supabase storage with admin client...')
+          const { data, error } = await supabaseAdmin.storage
             .from(STORAGE_BUCKETS.VIDEOS)
             .upload(filePath, videoBlob, {
               contentType: video.mimeType || 'video/mp4',
@@ -323,7 +324,7 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
           }
 
           // Get public URL
-          const { data: urlData } = supabase.storage
+          const { data: urlData } = supabaseAdmin.storage
             .from(STORAGE_BUCKETS.VIDEOS)
             .getPublicUrl(data.path)
 

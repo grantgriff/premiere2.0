@@ -8,10 +8,26 @@ export const getPublicKey = () =>
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
+export const getServiceRoleKey = () =>
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
 // Server-side Supabase client (basic, no auth context - for client uploads etc)
 export const supabase = createClient(
   getSupabaseUrl(),
   getPublicKey()
+)
+
+// Service role client for backend operations (bypasses RLS)
+// Use this for automated backend tasks like uploading Veo base64 videos
+export const supabaseAdmin = createClient(
+  getSupabaseUrl(),
+  getServiceRoleKey(),
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    }
+  }
 )
 
 // Singleton browser client - stored globally to prevent multiple instances
