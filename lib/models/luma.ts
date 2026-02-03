@@ -44,6 +44,15 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
     // Map duration to valid Luma format
     const lumaDuration = mapToLumaDuration(params.duration || 5)
 
+    const hasCharacterRef = params.characterReferenceUrls && params.characterReferenceUrls.length > 0
+
+    // IMPORTANT: Character references should NOT use keyframes (image-to-video mode)
+    // Image-to-video animates the scene in the photo, not extract character appearance
+    // The enhanced prompt already describes the character in detail
+    if (hasCharacterRef) {
+      console.log(`[Luma] Character detected - using text-to-video mode with enhanced prompt (image-to-video would animate the photo scene, not extract character)`)
+    }
+
     // Build request body matching exact API spec
     const body: Record<string, unknown> = {
       model: LUMA_MODEL,
@@ -54,18 +63,15 @@ export async function generateWithLuma(params: GenerationParams): Promise<Genera
       loop: false,
     }
 
-    // Add keyframes for image-to-video (style reference or character image)
-    const imageUrl = params.styleReferenceUrl || params.characterReferenceUrls?.[0]
-    if (imageUrl) {
+    // Add keyframes for image-to-video ONLY for style references, NOT for characters
+    if (params.styleReferenceUrl && !hasCharacterRef) {
       body.keyframes = {
         frame0: {
           type: 'image',
-          url: imageUrl,
+          url: params.styleReferenceUrl,
         },
       }
-      if (!params.styleReferenceUrl && params.characterReferenceUrls?.[0]) {
-        console.log(`[Luma] Using character reference image as frame0: ${imageUrl.substring(0, 60)}...`)
-      }
+      console.log(`[Luma] Using style reference as frame0: ${params.styleReferenceUrl.substring(0, 60)}...`)
     }
 
     console.log('[Luma] Request URL:', `${LUMA_API_BASE}/generations/video`)
