@@ -213,11 +213,13 @@ export function ChatPanel() {
       let enhancedPrompt = prompt
       if (selectedCharacterIds.length > 0) {
         const selectedCharacters = characters.filter(c => selectedCharacterIds.includes(c.id))
-        const characterNames = selectedCharacters.map(c => c.name).join(', ')
+        const characterNames = selectedCharacters.map(c => c.name).join(' and ')
 
-        // Add character reference to the prompt
-        enhancedPrompt = `${prompt}, featuring ${characterNames} as the main subject`
-        console.log(`[ChatPanel] Enhanced prompt with characters: ${enhancedPrompt}`)
+        // Build highly explicit character reference for AI models
+        // Make it crystal clear that this person should be the main subject
+        enhancedPrompt = `A cinematic shot of ${characterNames} ${prompt}. ${characterNames} is the main subject and central focus of this video. Match the exact appearance, facial features, hair, clothing, and style from the reference image provided. Keep ${characterNames}'s face clearly visible and recognizable throughout the video.`
+
+        console.log(`[ChatPanel] Enhanced prompt with explicit character reference:`, enhancedPrompt)
       }
 
       // Start generation with all references
