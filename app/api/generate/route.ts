@@ -112,27 +112,37 @@ export async function POST(request: NextRequest) {
 
     // Fetch character reference images if characters are selected
     let characterReferenceUrls: string[] = []
+    let characterGcsUris: string[] = []
     if (characterIds && characterIds.length > 0) {
       console.log(`[Generate] Fetching ${characterIds.length} character(s):`, characterIds)
 
       const { data: characters, error: charError } = await supabase
         .from('characters')
-        .select('id, name, reference_image_url')
+        .select('id, name, reference_image_url, gcs_image_uri')
         .in('id', characterIds)
         .eq('user_id', userId)
 
       if (charError) {
         console.error('[Generate] Error fetching characters:', charError)
       } else if (characters && characters.length > 0) {
-        // Extract reference image URLs (filter out nulls)
+        // Extract both GCS URIs (for Veo) and HTTP URLs (for Luma/Runway/Sora)
+        characterGcsUris = characters
+          .map(c => c.gcs_image_uri)
+          .filter((url): url is string => url !== null && url !== undefined)
+
         characterReferenceUrls = characters
           .map(c => c.reference_image_url)
           .filter((url): url is string => url !== null && url !== undefined)
 
-        console.log(`[Generate] Found ${characterReferenceUrls.length} character reference image(s)`)
-        characterReferenceUrls.forEach((url, i) => {
-          console.log(`[Generate] Character ${i + 1}: ${url.substring(0, 80)}...`)
-        })
+        console.log(`[Generate] Found ${characterGcsUris.length} GCS URI(s) and ${characterReferenceUrls.length} HTTP URL(s)`)
+        if (characterGcsUris.length > 0) {
+          console.log(`[Generate] GCS URIs (for Veo): ${characterGcsUris.join(', ')}`)
+        }
+        if (characterReferenceUrls.length > 0) {
+          characterReferenceUrls.forEach((url, i) => {
+            console.log(`[Generate] HTTP URL ${i + 1}: ${url.substring(0, 80)}...`)
+          })
+        }
       }
     }
 
@@ -185,7 +195,8 @@ export async function POST(request: NextRequest) {
     // Actually call the video generation API
     console.log(`[Generate] Starting ${model} generation for video ${videoId}`)
     console.log(`[Generate] Style reference: ${primaryStyleUrl || 'none'}`)
-    console.log(`[Generate] Character references: ${characterReferenceUrls.length > 0 ? characterReferenceUrls.length : 'none'}`)
+    console.log(`[Generate] Character HTTP URLs: ${characterReferenceUrls.length > 0 ? characterReferenceUrls.length : 'none'}`)
+    console.log(`[Generate] Character GCS URIs: ${characterGcsUris.length > 0 ? characterGcsUris.length : 'none'}`)
 
     const genResult = await generateVideo(model as VideoModelId, {
       prompt,
@@ -193,6 +204,7 @@ export async function POST(request: NextRequest) {
       aspectRatio: '16:9',
       styleReferenceUrl: primaryStyleUrl,
       characterReferenceUrls: characterReferenceUrls.length > 0 ? characterReferenceUrls : undefined,
+      characterGcsUris: characterGcsUris.length > 0 ? characterGcsUris : undefined,
     })
 
     if (!genResult.success || !genResult.jobId) {

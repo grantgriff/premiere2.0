@@ -52,6 +52,7 @@ export interface Character {
   description: string
   referenceImageUrl: string | null
   thumbnailUrl: string | null
+  gcsImageUri: string | null // Google Cloud Storage URI for Veo API
   embeddingStatus: 'pending' | 'processing' | 'ready' | 'failed'
   createdAt: Date
   usageCount: number

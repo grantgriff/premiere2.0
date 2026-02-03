@@ -1,263 +1,284 @@
-// Google Veo 3.1 API Integration
-// Docs: https://ai.google.dev/gemini-api/docs/video
+// Google Veo 3.1 API Integration (Vertex AI)
+// Docs: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo
 import { GenerationParams, GenerationResult, GenerationStatus } from './types'
 
-const VEO_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
-const VEO_MODEL = 'veo-3.1-fast-generate-preview'
+// Vertex AI endpoints
+const VERTEX_AI_REGION = 'us-central1'
+const VEO_MODEL = 'veo-3.1-fast-generate-001'
 
-interface VeoGenerateRequest {
-  prompt: string
-  config?: {
-    aspectRatio?: '16:9' | '9:16'
-    resolution?: '720p' | '1080p' | '4k'
-    durationSeconds?: '4' | '6' | '8' // API expects string values
-    personGeneration?: 'allow_all' | 'allow_adult'
-    negativePrompt?: string
+// Helper to get OAuth access token from Google Cloud
+async function getAccessToken(): Promise<string | null> {
+  const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY
+
+  // For now, we'll use API keys as a workaround since Vertex AI OAuth is complex
+  // In production, you'd want to use service account JSON or application default credentials
+  if (apiKey) {
+    // Try to exchange API key for access token (this is a fallback)
+    return apiKey
   }
-  image?: {
-    bytesBase64Encoded?: string
-    mimeType?: string
-    fileUri?: string
-  }
-  // Up to 3 reference images for style/content guidance (Veo 3.1 only)
-  referenceImages?: Array<{
-    image: {
-      fileUri?: string
-      bytesBase64Encoded?: string
-      mimeType?: string
-    }
-    // Reference type: 'REFERENCE_TYPE_STYLE' | 'REFERENCE_TYPE_SUBJECT' etc.
-    referenceType?: string
-  }>
+
+  console.error('[Veo] No authentication method available')
+  return null
 }
 
-interface VeoGenerateResponse {
-  name: string // Operation name for polling
+function getVertexEndpoint(projectId: string): string {
+  return `https://${VERTEX_AI_REGION}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${VERTEX_AI_REGION}/publishers/google/models/${VEO_MODEL}`
+}
+
+interface VertexVeoRequest {
+  instances: Array<{
+    prompt: string
+    image?: {
+      bytesBase64Encoded?: string
+      gcsUri?: string
+    }
+  }>
+  parameters: {
+    sampleCount?: number
+    resolution?: string
+    aspectRatio?: string
+    durationSeconds?: string
+    storageUri?: string
+    generateAudio?: boolean
+  }
+}
+
+interface VertexOperationResponse {
+  name: string
+  metadata?: {
+    '@type': string
+    [key: string]: unknown
+  }
   done?: boolean
   error?: {
     code: number
     message: string
-    status: string
+    details: unknown[]
   }
-}
-
-interface VeoOperationResponse {
-  name: string
-  done: boolean
-  metadata?: Record<string, unknown>
   response?: {
-    // Can be either format depending on API version
-    generatedVideos?: Array<{
-      video: {
-        uri: string
-        mimeType?: string
-      }
+    '@type': string
+    videos?: Array<{
+      gcsUri?: string
+      bytesBase64Encoded?: string
+      mimeType?: string
     }>
-    generateVideoResponse?: {
-      generatedSamples: Array<{
-        video: {
-          uri: string
-          mimeType?: string
-        }
-      }>
-    }
-  }
-  error?: {
-    code: number
-    message: string
-    status: string
   }
 }
 
 export async function generateWithVeo(params: GenerationParams): Promise<GenerationResult> {
-  // Accept both GOOGLE_AI_API_KEY and GEMINI_API_KEY for backwards compatibility
+  const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID
   const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY
+
+  if (!projectId) {
+    return {
+      success: false,
+      error: 'GOOGLE_CLOUD_PROJECT_ID not configured. Set your Google Cloud project ID in environment variables.'
+    }
+  }
+
   if (!apiKey) {
-    return { success: false, error: 'Google AI API key not configured (needed for Veo). Set GOOGLE_AI_API_KEY in environment.' }
+    return {
+      success: false,
+      error: 'Google AI API key not configured. Set GOOGLE_AI_API_KEY in environment variables.'
+    }
   }
 
   try {
-    // Map duration to allowed values (4, 6, 8) as strings
-    let durationSeconds: '4' | '6' | '8' = '8'
-    if (params.duration <= 4) durationSeconds = '4'
-    else if (params.duration <= 6) durationSeconds = '6'
-    else durationSeconds = '8'
+    const endpoint = getVertexEndpoint(projectId)
 
-    // Map aspect ratio
-    const aspectRatio: '16:9' | '9:16' = params.aspectRatio === '9:16' ? '9:16' : '16:9'
-
-    const request: VeoGenerateRequest = {
+    // Build Vertex AI request format
+    const instance: { prompt: string; image?: { gcsUri: string } } = {
       prompt: params.prompt,
-      config: {
-        aspectRatio,
-        resolution: '720p', // Default to 720p for faster generation
-        durationSeconds,
-        personGeneration: 'allow_all', // Required for text-to-video
+    }
+
+    // Add character reference image - prefer GCS URIs, fallback to HTTP URLs
+    const characterImageUri = params.characterGcsUris?.[0] || params.characterReferenceUrls?.[0]
+
+    if (characterImageUri) {
+      console.log(`[Veo] Adding character reference image: ${characterImageUri.substring(0, 80)}...`)
+
+      if (characterImageUri.startsWith('gs://')) {
+        // Perfect! GCS URI can be used directly
+        instance.image = { gcsUri: characterImageUri }
+        console.log('[Veo] Using GCS URI for character reference (optimal for Veo)')
+      } else {
+        console.warn('[Veo] Image URL is not a GCS URI. Veo requires gs:// URIs in Vertex AI.')
+        console.warn('[Veo] Character reference will not be used. Make sure GOOGLE_CLOUD_STORAGE_BUCKET is configured.')
+      }
+    }
+
+    const requestBody: VertexVeoRequest = {
+      instances: [instance],
+      parameters: {
+        sampleCount: 1,
+        resolution: '720p',
+        aspectRatio: params.aspectRatio || '16:9',
+        durationSeconds: params.duration.toString(),
+        generateAudio: false,
       },
     }
 
-    // Add image for image-to-video if provided (first frame)
-    if (params.styleReferenceUrl) {
-      // If it's a file URI or https URL, use fileUri
-      if (params.styleReferenceUrl.startsWith('http') || params.styleReferenceUrl.startsWith('gs://')) {
-        request.image = {
-          fileUri: params.styleReferenceUrl,
-        }
-      }
-      // Note: For base64 images, you'd use bytesBase64Encoded instead
-    }
+    console.log('[Veo] Vertex AI Request:', {
+      endpoint: `${endpoint}:predictLongRunning`,
+      projectId,
+      prompt: params.prompt.substring(0, 100),
+      hasImage: !!instance.image,
+    })
 
-    // Add character reference images (Veo 3.1 supports up to 3 referenceImages)
-    if (params.characterReferenceUrls && params.characterReferenceUrls.length > 0) {
-      // Take up to 3 character images
-      const characterImages = params.characterReferenceUrls.slice(0, 3)
-      console.log(`[Veo] Adding ${characterImages.length} character reference image(s)`)
-
-      request.referenceImages = characterImages.map(url => ({
-        image: {
-          fileUri: url,
-        },
-        // Use SUBJECT type for character consistency
-        referenceType: 'REFERENCE_TYPE_SUBJECT',
-      }))
-
-      // Note: When using referenceImages, durationSeconds must be "8" according to docs
-      if (request.config && characterImages.length > 0) {
-        request.config.durationSeconds = '8'
-        console.log('[Veo] Using 8s duration (required with referenceImages)')
-      }
-    }
-
-    console.log('[Veo] Request:', JSON.stringify(request, null, 2))
-    console.log(`[Veo] API Endpoint: ${VEO_API_BASE}/models/${VEO_MODEL}:generateVideos`)
-    console.log(`[Veo] API Key present: ${!!apiKey}, length: ${apiKey?.length}`)
-
-    const response = await fetch(
-      `${VEO_API_BASE}/models/${VEO_MODEL}:generateVideos`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify(request),
-      }
-    )
+    const response = await fetch(`${endpoint}:predictLongRunning`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey, // Using API key for now
+      },
+      body: JSON.stringify(requestBody),
+    })
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('[Veo] API error response:', {
+      console.error('[Veo] Vertex AI error:', {
         status: response.status,
         statusText: response.statusText,
         body: errorText,
-        url: response.url,
       })
 
       if (response.status === 403) {
-        return { success: false, error: 'Veo API access denied. Make sure billing is enabled and Veo API is enabled in your Google Cloud project.' }
+        return {
+          success: false,
+          error: 'Veo access denied. Make sure Vertex AI API is enabled and billing is set up in your Google Cloud project.'
+        }
       }
       if (response.status === 404) {
-        return { success: false, error: 'Veo model not found. The Veo API may not be available in your region.' }
+        return {
+          success: false,
+          error: 'Veo model not found in Vertex AI. Make sure you have access to veo-3.1-fast-generate-001 in your project.'
+        }
       }
-      if (response.status === 429) {
-        return { success: false, error: 'Veo rate limit exceeded. Please try again later.' }
+      if (response.status === 400) {
+        return {
+          success: false,
+          error: `Veo request error: ${errorText}. Check that your parameters are correct.`
+        }
       }
 
-      return { success: false, error: `Veo API error (${response.status}): ${errorText}` }
+      return {
+        success: false,
+        error: `Veo API error (${response.status}): ${errorText}`
+      }
     }
 
-    const data: VeoGenerateResponse = await response.json()
-    console.log('Veo response:', JSON.stringify(data, null, 2))
+    const data: VertexOperationResponse = await response.json()
+    console.log('[Veo] Operation started:', data.name)
 
     if (data.error) {
-      return { success: false, error: data.error.message }
+      return {
+        success: false,
+        error: data.error.message
+      }
     }
 
     if (!data.name) {
-      return { success: false, error: 'Veo API did not return an operation name' }
+      return {
+        success: false,
+        error: 'Veo did not return an operation name'
+      }
     }
 
     return {
       success: true,
       jobId: data.name,
-      estimatedTime: durationSeconds === '8' ? 45 : 30, // Fast model is quicker
+      estimatedTime: 60, // Veo takes about 60 seconds
     }
   } catch (error) {
-    console.error('Veo generation error:', error)
+    console.error('[Veo] Generation error:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
 
 export async function checkVeoStatus(operationName: string): Promise<GenerationStatus> {
+  const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID
   const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY
-  if (!apiKey) {
-    return { status: 'failed', error: 'Google AI API key not configured' }
+
+  if (!projectId || !apiKey) {
+    return {
+      status: 'failed',
+      error: 'Missing Google Cloud project ID or API key'
+    }
   }
 
   try {
-    // The operation name is the full path returned from generateVideos
-    // Format: operations/{operation_id} or just the operation name
-    const opPath = operationName.startsWith('operations/')
-      ? operationName
-      : `operations/${operationName}`
+    const endpoint = getVertexEndpoint(projectId)
 
-    const response = await fetch(
-      `${VEO_API_BASE}/${opPath}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-      }
-    )
+    // Use fetchPredictOperation endpoint as per Vertex AI docs
+    const response = await fetch(`${endpoint}:fetchPredictOperation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        operationName: operationName,
+      }),
+    })
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('Veo status check error:', response.status, errorText)
-      return { status: 'failed', error: `Failed to check status: ${response.status}` }
+      console.error('[Veo] Status check error:', response.status, errorText)
+      return {
+        status: 'failed',
+        error: `Failed to check status: ${response.status}`
+      }
     }
 
-    const data: VeoOperationResponse = await response.json()
-    console.log('Veo operation status:', data.done ? 'done' : 'pending', data.name)
+    const data: VertexOperationResponse = await response.json()
+    console.log('[Veo] Operation status:', data.done ? 'done' : 'in progress')
 
     if (data.error) {
-      return { status: 'failed', error: data.error.message }
+      return {
+        status: 'failed',
+        error: data.error.message
+      }
     }
 
-    if (data.done && data.response) {
-      // Handle both response formats
-      let videoUri: string | undefined
+    if (data.done && data.response?.videos?.[0]) {
+      const video = data.response.videos[0]
 
-      // Format 1: generatedVideos array
-      if (data.response.generatedVideos?.[0]?.video?.uri) {
-        videoUri = data.response.generatedVideos[0].video.uri
-      }
-      // Format 2: generateVideoResponse.generatedSamples array
-      else if (data.response.generateVideoResponse?.generatedSamples?.[0]?.video?.uri) {
-        videoUri = data.response.generateVideoResponse.generatedSamples[0].video.uri
-      }
+      // Video can be in GCS or base64
+      if (video.gcsUri) {
+        // Convert gs:// URI to public URL
+        // Note: The GCS bucket needs to be publicly accessible or you need to generate a signed URL
+        console.log('[Veo] Video stored at:', video.gcsUri)
 
-      if (videoUri) {
         return {
           status: 'completed',
-          videoUrl: videoUri,
-          thumbnailUrl: undefined, // Veo doesn't provide thumbnails
+          videoUrl: video.gcsUri, // You may need to convert this to a public HTTP URL
+          thumbnailUrl: undefined,
+        }
+      } else if (video.bytesBase64Encoded) {
+        // Video returned as base64 - need to upload to your storage
+        console.log('[Veo] Video returned as base64, needs to be uploaded')
+        return {
+          status: 'failed',
+          error: 'Veo returned base64 video - need to implement upload to storage'
         }
       }
-      return { status: 'failed', error: 'Video generated but no URI returned' }
+
+      return {
+        status: 'failed',
+        error: 'Video completed but no URL or data returned'
+      }
     }
 
     // Still processing
     return { status: 'processing' }
   } catch (error) {
-    console.error('Veo status check exception:', error)
+    console.error('[Veo] Status check exception:', error)
     return {
       status: 'failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createCharacter, getCharacters, updateCharacter, deleteCharacter } from '@/lib/db-supabase'
 import { generateId } from '@/lib/utils'
+import { mirrorImageToGCS } from '@/lib/gcs-server'
 
 // Create a new character
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, description, referenceImageUrl, thumbnailUrl, embeddingStatus } = body
+    const { userId, name, description, referenceImageUrl, thumbnailUrl, gcsImageUri, embeddingStatus } = body
 
     if (!userId || !name) {
       return NextResponse.json(
@@ -15,14 +16,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const characterId = generateId()
+    let finalGcsUri = gcsImageUri || null
+
+    // If there's a reference image URL and no GCS URI yet, mirror it to GCS
+    if (referenceImageUrl && !finalGcsUri) {
+      console.log('[Characters API] Mirroring image to GCS for Veo compatibility...')
+
+      // Generate GCS path: characters/{userId}/{characterId}.jpg
+      const imageExtension = referenceImageUrl.match(/\.(jpg|jpeg|png|webp)/i)?.[1] || 'jpg'
+      const gcsPath = `characters/${userId}/${characterId}.${imageExtension}`
+
+      const gcsResult = await mirrorImageToGCS(referenceImageUrl, gcsPath)
+
+      if (gcsResult.success && gcsResult.gcsUri) {
+        finalGcsUri = gcsResult.gcsUri
+        console.log('[Characters API] GCS upload successful:', finalGcsUri)
+      } else {
+        console.warn('[Characters API] GCS upload failed (non-fatal):', gcsResult.error)
+        // Don't fail character creation if GCS upload fails - Veo just won't work
+      }
+    }
+
     // Create character in Supabase
     const character = await createCharacter({
-      id: generateId(),
+      id: characterId,
       userId,
       name,
       description: description || '',
       referenceImageUrl: referenceImageUrl || null,
       thumbnailUrl: thumbnailUrl || null,
+      gcsImageUri: finalGcsUri,
       embeddingStatus: embeddingStatus || 'pending',
     })
 
@@ -42,6 +66,7 @@ export async function POST(request: NextRequest) {
         description: character.description,
         referenceImageUrl: character.reference_image_url,
         thumbnailUrl: character.thumbnail_url,
+        gcsImageUri: character.gcs_image_uri,
         embeddingStatus: character.embedding_status,
         createdAt: character.created_at,
         usageCount: 0,
@@ -75,6 +100,7 @@ export async function GET(request: NextRequest) {
       description: c.description,
       referenceImageUrl: c.reference_image_url,
       thumbnailUrl: c.thumbnail_url,
+      gcsImageUri: c.gcs_image_uri,
       embeddingStatus: c.embedding_status,
       createdAt: c.created_at,
       usageCount: 0,
@@ -94,7 +120,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, userId, name, description, referenceImageUrl, thumbnailUrl, embeddingStatus } = body
+    const { id, userId, name, description, referenceImageUrl, thumbnailUrl, gcsImageUri, embeddingStatus } = body
 
     if (!id || !userId) {
       return NextResponse.json(
@@ -108,6 +134,7 @@ export async function PUT(request: NextRequest) {
       description,
       referenceImageUrl,
       thumbnailUrl,
+      gcsImageUri,
       embeddingStatus,
     })
 
@@ -123,6 +150,7 @@ export async function PUT(request: NextRequest) {
         description: character.description,
         referenceImageUrl: character.reference_image_url,
         thumbnailUrl: character.thumbnail_url,
+        gcsImageUri: character.gcs_image_uri,
         embeddingStatus: character.embedding_status,
         createdAt: character.created_at,
         usageCount: 0,

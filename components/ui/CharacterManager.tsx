@@ -19,6 +19,7 @@ import { CharacterCard } from './CharacterCard'
 import { generateId } from '@/lib/utils'
 import { useAuth } from '@/components/AuthProvider'
 import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
+import { uploadToGCS } from '@/lib/gcs'
 
 interface CharacterManagerProps {
   isOpen: boolean
@@ -215,6 +216,7 @@ export function CharacterManager({
         description: description.trim(),
         referenceImageUrl: uploadedImageUrl || imagePreview,
         thumbnailUrl: uploadedImageUrl || imagePreview,
+        gcsImageUri: null, // Will be populated by backend when uploaded to GCS
         embeddingStatus: 'ready', // Set to ready immediately since we have the image
         createdAt: new Date(),
         usageCount: 0,
@@ -256,6 +258,7 @@ export function CharacterManager({
       description: description.trim() || generatePrompt.trim(),
       referenceImageUrl: placeholderImage,
       thumbnailUrl: placeholderImage,
+      gcsImageUri: null, // Will be populated by backend when uploaded to GCS
       embeddingStatus: 'ready', // Set to ready immediately since we have the image
       createdAt: new Date(),
       usageCount: 0,
@@ -284,6 +287,7 @@ export function CharacterManager({
       description: description.trim() || `Auto-captured character - will be extracted from first video frame`,
       referenceImageUrl: null,
       thumbnailUrl: null,
+      gcsImageUri: null, // Will be populated by backend when uploaded to GCS
       embeddingStatus: 'pending',
       createdAt: new Date(),
       usageCount: 0,
