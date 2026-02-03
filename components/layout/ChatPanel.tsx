@@ -209,14 +209,26 @@ export function ChatPanel() {
         ...uploadedUrls,
       ]
 
+      // Enhance prompt with character names when characters are selected
+      let enhancedPrompt = prompt
+      if (selectedCharacterIds.length > 0) {
+        const selectedCharacters = characters.filter(c => selectedCharacterIds.includes(c.id))
+        const characterNames = selectedCharacters.map(c => c.name).join(', ')
+
+        // Add character reference to the prompt
+        enhancedPrompt = `${prompt}, featuring ${characterNames} as the main subject`
+        console.log(`[ChatPanel] Enhanced prompt with characters: ${enhancedPrompt}`)
+      }
+
       // Start generation with all references
       // Note: userId is now extracted from session cookie on the server
       const response = await startGeneration({
-        prompt,
+        prompt: enhancedPrompt,
         model: selectedModel,
         duration: selectedDuration,
         conversationId: convId,
         styleReferences,
+        characterIds: selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
       })
 
       if (!response.success || !response.videoId) {
@@ -235,10 +247,10 @@ export function ChatPanel() {
         createMessageApi(convId, 'assistant', warningContent)
       }
 
-      // Create video entry
+      // Create video entry (use enhanced prompt so user sees what was sent to AI)
       const video = {
         id: response.videoId,
-        prompt,
+        prompt: enhancedPrompt,
         model: selectedModel,
         duration: selectedDuration,
         status: 'pending' as const,
@@ -277,7 +289,7 @@ export function ChatPanel() {
           // Set current video with verifying state
           const completedVideo = {
             id: response.videoId!,
-            prompt,
+            prompt: enhancedPrompt,
             model: selectedModel,
             duration: selectedDuration,
             status: 'completed' as const,
