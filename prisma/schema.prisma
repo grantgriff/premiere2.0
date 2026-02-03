@@ -104,6 +104,7 @@ model Character {
   name              String
   description       String
   referenceImageUrl String?  @map("reference_image_url")
+  gcsImageUri       String?  @map("gcs_image_uri") // gs:// URI for Veo (Google Cloud Storage)
   embeddingData     String?  @map("embedding_data") // JSON string
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
