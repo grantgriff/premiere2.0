@@ -165,6 +165,16 @@ export async function POST(request: NextRequest) {
             }
           })
         }
+      } else {
+        // No characters found - this is the problem!
+        console.warn(`[Generate] ⚠️ Character query returned ZERO results!`)
+        console.warn(`[Generate] Queried IDs:`, characterIds)
+        console.warn(`[Generate] User ID filter: ${userId}`)
+        console.warn(`[Generate] This means either:`)
+        console.warn(`[Generate]   1. Character(s) don't exist in database`)
+        console.warn(`[Generate]   2. Character(s) belong to a different user_id`)
+        console.warn(`[Generate]   3. Character IDs are stale (deleted/recreated)`)
+        console.warn(`[Generate] Check Supabase 'characters' table directly`)
       }
     }
 
