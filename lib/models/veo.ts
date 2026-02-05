@@ -54,6 +54,14 @@ interface VertexVeoRequest {
       gcsUri?: string
       mimeType?: string
     }
+    referenceImages?: Array<{
+      image: {
+        bytesBase64Encoded?: string
+        gcsUri?: string
+        mimeType: string
+      }
+      referenceType: 'asset' | 'style'
+    }>
   }>
   parameters: {
     sampleCount?: number
@@ -110,30 +118,45 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
     const endpoint = getVertexEndpoint(projectId)
 
     // Build Vertex AI request format
-    const instance: { prompt: string; image?: { gcsUri: string; mimeType: string } } = {
+    const instance: {
+      prompt: string
+      referenceImages?: Array<{
+        image: { gcsUri: string; mimeType: string }
+        referenceType: 'asset' | 'style'
+      }>
+    } = {
       prompt: params.prompt,
     }
 
-    // Add character reference image - prefer GCS URIs, fallback to HTTP URLs
-    const characterImageUri = params.characterGcsUris?.[0] || params.characterReferenceUrls?.[0]
+    // Add character reference images as assets (not first frame)
+    const characterGcsUris = params.characterGcsUris || []
 
-    if (characterImageUri) {
-      console.log(`[Veo] Adding character reference image: ${characterImageUri.substring(0, 80)}...`)
+    if (characterGcsUris.length > 0) {
+      instance.referenceImages = []
 
-      if (characterImageUri.startsWith('gs://')) {
-        // Determine MIME type from file extension
-        const mimeType = characterImageUri.endsWith('.png')
-          ? 'image/png'
-          : characterImageUri.endsWith('.webp')
-          ? 'image/webp'
-          : 'image/jpeg' // Default to JPEG for .jpg, .jpeg, or unknown
+      for (const characterImageUri of characterGcsUris) {
+        if (characterImageUri.startsWith('gs://')) {
+          // Determine MIME type from file extension
+          const mimeType = characterImageUri.endsWith('.png')
+            ? 'image/png'
+            : characterImageUri.endsWith('.webp')
+            ? 'image/webp'
+            : 'image/jpeg' // Default to JPEG for .jpg, .jpeg, or unknown
 
-        // Perfect! GCS URI can be used directly
-        instance.image = { gcsUri: characterImageUri, mimeType }
-        console.log(`[Veo] Using GCS URI for character reference (optimal for Veo) with mimeType: ${mimeType}`)
-      } else {
-        console.warn('[Veo] Image URL is not a GCS URI. Veo requires gs:// URIs in Vertex AI.')
-        console.warn('[Veo] Character reference will not be used. Make sure GOOGLE_CLOUD_STORAGE_BUCKET is configured.')
+          instance.referenceImages.push({
+            image: {
+              gcsUri: characterImageUri,
+              mimeType,
+            },
+            referenceType: 'asset', // Use as reference asset, not first frame
+          })
+
+          console.log(`[Veo] Adding character as reference asset (not first frame): ${characterImageUri.substring(0, 80)}...`)
+          console.log(`[Veo] MIME type: ${mimeType}`)
+        } else {
+          console.warn('[Veo] Character image is not a GCS URI. Veo requires gs:// URIs in Vertex AI.')
+          console.warn(`[Veo] Skipping: ${characterImageUri.substring(0, 80)}...`)
+        }
       }
     }
 
@@ -152,7 +175,7 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
       endpoint: `${endpoint}:predictLongRunning`,
       projectId,
       prompt: params.prompt.substring(0, 100),
-      hasImage: !!instance.image,
+      referenceAssets: instance.referenceImages?.length || 0,
     })
 
     const response = await fetch(`${endpoint}:predictLongRunning`, {
