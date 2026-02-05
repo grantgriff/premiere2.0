@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { VideoPanel } from '@/components/layout/VideoPanel'
 import { ChatPanel } from '@/components/layout/ChatPanel'
@@ -8,10 +8,39 @@ import { AnalyticsDashboard } from '@/components/ui/AnalyticsDashboard'
 import { Video, BarChart3, LogOut, User } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { signOut } from '@/lib/auth'
+import { useAppStore } from '@/lib/store'
 
 export default function Home() {
   const [activeView, setActiveView] = useState<'studio' | 'analytics'>('studio')
   const { user, loading } = useAuth()
+  const setCharacters = useAppStore((state) => state.setCharacters)
+
+  // Load characters on app initialization to trigger auto-clean of stale IDs
+  useEffect(() => {
+    if (user?.id) {
+      loadCharacters()
+    }
+  }, [user?.id])
+
+  const loadCharacters = async () => {
+    if (!user?.id) return
+
+    try {
+      const response = await fetch(`/api/characters?userId=${user.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.characters) {
+          setCharacters(data.characters.map((c: Record<string, unknown>) => ({
+            ...c,
+            createdAt: new Date(c.createdAt as string),
+          })))
+          console.log(`[App] Loaded ${data.characters.length} character(s) on initialization`)
+        }
+      }
+    } catch (error) {
+      console.error('[App] Failed to load characters on initialization:', error)
+    }
+  }
 
   const handleSignOut = async () => {
     try {
