@@ -160,6 +160,11 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
       }
     }
 
+    // Set up output storage URI for Veo (required when using referenceImages)
+    const bucketName = process.env.GOOGLE_CLOUD_STORAGE_BUCKET || 'premiere-characters-grant'
+    const outputPath = `veo-outputs/${generateId()}`
+    const storageUri = `gs://${bucketName}/${outputPath}`
+
     const requestBody: VertexVeoRequest = {
       instances: [instance],
       parameters: {
@@ -167,6 +172,7 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
         resolution: '720p',
         aspectRatio: params.aspectRatio || '16:9',
         durationSeconds: params.duration.toString(),
+        storageUri: storageUri, // Output location for generated video
         generateAudio: false,
       },
     }
