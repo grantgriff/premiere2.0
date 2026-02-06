@@ -5,16 +5,18 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { VideoPanel } from '@/components/layout/VideoPanel'
 import { ChatPanel } from '@/components/layout/ChatPanel'
 import { AnalyticsDashboard } from '@/components/ui/AnalyticsDashboard'
+import { MovieTimeline } from '@/components/ui/MovieTimeline'
 import { Video, BarChart3, LogOut, User } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { signOut } from '@/lib/auth'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, useActiveMovie } from '@/lib/store'
 
 export default function Home() {
   const [activeView, setActiveView] = useState<'studio' | 'analytics'>('studio')
   const { user, loading } = useAuth()
   const setCharacters = useAppStore((state) => state.setCharacters)
   const setMovies = useAppStore((state) => state.setMovies)
+  const activeMovie = useActiveMovie()
 
   // Load characters and movies on app initialization
   useEffect(() => {
@@ -153,14 +155,19 @@ export default function Home() {
         </div>
 
         {/* Content based on active view */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
           {activeView === 'studio' ? (
             <>
-              {/* Center Panel - Flexible */}
-              <VideoPanel />
+              <div className="flex-1 flex overflow-hidden">
+                {/* Center Panel - Flexible */}
+                <VideoPanel />
 
-              {/* Right Sidebar - 360px fixed */}
-              <ChatPanel />
+                {/* Right Sidebar - 360px fixed */}
+                <ChatPanel />
+              </div>
+
+              {/* Movie Timeline at bottom */}
+              {activeMovie && <MovieTimeline />}
             </>
           ) : (
             <div className="flex-1 overflow-hidden">
