@@ -405,7 +405,84 @@ export async function GET(request: NextRequest) {
       })
 
       if (dbJob && dbJob.externalJobId) {
-        console.log(`[Status] Restored job from database: ${dbJob.externalJobId}`)
+        // Check if job has exceeded max attempts or timeout
+        const MAX_ATTEMPTS = 3
+        const MAX_AGE_MS = 10 * 60 * 1000 // 10 minutes
+        const jobAge = Date.now() - dbJob.createdAt.getTime()
+
+        if (dbJob.attempts >= MAX_ATTEMPTS) {
+          console.error(`[Status] Job ${dbJob.externalJobId} exceeded max attempts (${MAX_ATTEMPTS})`)
+
+          // Mark as failed and stop polling
+          await Promise.all([
+            prisma.video.update({
+              where: { id: videoId },
+              data: { status: 'failed' },
+            }),
+            prisma.generationJob.update({
+              where: { videoId },
+              data: {
+                status: 'failed',
+                lastError: `Job exceeded maximum retry attempts (${MAX_ATTEMPTS})`,
+              },
+            }),
+          ])
+
+          return NextResponse.json({
+            id: videoId,
+            status: 'failed',
+            error: `Generation failed after ${MAX_ATTEMPTS} attempts`,
+            videoUrl: null,
+            thumbnailUrl: null,
+            qualityScore: null,
+            model: (video as { model: string }).model,
+            duration: (video as { duration: number }).duration,
+            prompt: (video as { prompt: string }).prompt,
+            createdAt: (video as { createdAt: Date }).createdAt.toISOString(),
+            completedAt: null,
+          })
+        }
+
+        if (jobAge > MAX_AGE_MS) {
+          console.error(`[Status] Job ${dbJob.externalJobId} exceeded timeout (${MAX_AGE_MS}ms)`)
+
+          // Mark as failed due to timeout
+          await Promise.all([
+            prisma.video.update({
+              where: { id: videoId },
+              data: { status: 'failed' },
+            }),
+            prisma.generationJob.update({
+              where: { videoId },
+              data: {
+                status: 'failed',
+                lastError: 'Job exceeded maximum time limit (10 minutes)',
+              },
+            }),
+          ])
+
+          return NextResponse.json({
+            id: videoId,
+            status: 'failed',
+            error: 'Generation timed out (exceeded 10 minutes)',
+            videoUrl: null,
+            thumbnailUrl: null,
+            qualityScore: null,
+            model: (video as { model: string }).model,
+            duration: (video as { duration: number }).duration,
+            prompt: (video as { prompt: string }).prompt,
+            createdAt: (video as { createdAt: Date }).createdAt.toISOString(),
+            completedAt: null,
+          })
+        }
+
+        // Increment attempts counter
+        await prisma.generationJob.update({
+          where: { videoId },
+          data: { attempts: { increment: 1 } },
+        })
+
+        console.log(`[Status] Restored job from database: ${dbJob.externalJobId} (attempt ${dbJob.attempts + 1})`)
         activeJob = {
           model: (video as { model: VideoModelId }).model,
           externalJobId: dbJob.externalJobId,
