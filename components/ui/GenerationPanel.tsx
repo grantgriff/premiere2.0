@@ -65,7 +65,7 @@ export function GenerationPanel({
           <Film className="w-4 h-4 text-accent" />
           <span className="text-sm font-medium text-foreground">{MODEL_NAMES[model]}</span>
         </div>
-        {status === 'completed' && video?.qualityScore !== null && (
+        {status === 'completed' && video && video.qualityScore !== null && (
           <QualityBadge
             score={video.qualityScore}
             report={video.qualityReport as QualityReport | null}
