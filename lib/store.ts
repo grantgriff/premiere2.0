@@ -140,6 +140,13 @@ interface AppState {
   generationProgress: number
   setGenerationProgress: (value: number) => void
 
+  // Multi-model generation
+  multiModelMode: boolean
+  setMultiModelMode: (value: boolean) => void
+  selectedModels: VideoModel[]
+  toggleModelSelection: (model: VideoModel) => void
+  clearModelSelection: () => void
+
   // UI State
   selectedModel: VideoModel
   setSelectedModel: (model: VideoModel) => void
@@ -254,6 +261,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   setIsGenerating: (value) => set({ isGenerating: value }),
   generationProgress: 0,
   setGenerationProgress: (value) => set({ generationProgress: value }),
+
+  // Multi-model generation
+  multiModelMode: false,
+  setMultiModelMode: (value) => set({ multiModelMode: value }),
+  selectedModels: [],
+  toggleModelSelection: (model) =>
+    set((state) => ({
+      selectedModels: state.selectedModels.includes(model)
+        ? state.selectedModels.filter((m) => m !== model)
+        : [...state.selectedModels, model],
+    })),
+  clearModelSelection: () => set({ selectedModels: [] }),
 
   // UI State
   selectedModel: 'veo3_1',
