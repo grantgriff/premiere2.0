@@ -1,13 +1,16 @@
 'use client'
 
+import { useState } from 'react'
 import { useAppStore, useActiveMovie } from '@/lib/store'
-import { Plus, Play, X } from 'lucide-react'
+import { Plus, Play, X, Sparkles } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
+import { GenerateNextClipDialog } from './GenerateNextClipDialog'
 
 export function MovieTimeline() {
   const { user } = useAuth()
   const activeMovie = useActiveMovie()
   const removeClipFromMovie = useAppStore((state) => state.removeClipFromMovie)
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false)
 
   const handleRemoveClip = async (clipId: string) => {
     if (!activeMovie || !user?.id) return
@@ -73,12 +76,33 @@ export function MovieTimeline() {
           </div>
         ))}
 
-        {/* Add clip button */}
+        {/* Generate Next Clip button */}
+        {activeMovie.clips.length > 0 && activeMovie.clips[activeMovie.clips.length - 1].lastFrameUrl && (
+          <button
+            onClick={() => setShowGenerateDialog(true)}
+            className="flex-shrink-0 w-36 h-24 rounded-lg border-2 border-accent/30 bg-gradient-to-br from-accent/10 to-purple-500/10 hover:border-accent hover:from-accent/20 hover:to-purple-500/20 flex flex-col items-center justify-center gap-2 text-accent transition-all group"
+          >
+            <Sparkles className="w-6 h-6 group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-medium">Generate Next</span>
+          </button>
+        )}
+
+        {/* Add existing clip button */}
         <button className="flex-shrink-0 w-36 h-24 rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-accent/5 flex flex-col items-center justify-center gap-2 text-foreground-secondary hover:text-accent transition-colors">
           <Plus className="w-6 h-6" />
-          <span className="text-xs">Add clip</span>
+          <span className="text-xs">Add Existing</span>
         </button>
       </div>
+
+      {/* Generate Next Clip Dialog */}
+      {activeMovie.clips.length > 0 && activeMovie.clips[activeMovie.clips.length - 1].lastFrameUrl && (
+        <GenerateNextClipDialog
+          isOpen={showGenerateDialog}
+          onClose={() => setShowGenerateDialog(false)}
+          movieId={activeMovie.id}
+          previousClip={activeMovie.clips[activeMovie.clips.length - 1]}
+        />
+      )}
     </div>
   )
 }
