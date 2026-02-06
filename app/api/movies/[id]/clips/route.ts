@@ -4,10 +4,10 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 // POST /api/movies/[id]/clips - Add a clip to a movie
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const movieId = params.id
+    const movieId = (await params).id
     const body = await request.json()
     const { videoId, position, firstFrameUrl, lastFrameUrl } = body
 
@@ -58,10 +58,10 @@ export async function POST(
 // DELETE /api/movies/[id]/clips - Remove a clip from a movie
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const movieId = params.id
+    const movieId = (await params).id
     const { searchParams } = new URL(request.url)
     const clipId = searchParams.get('clipId')
 
@@ -131,10 +131,10 @@ export async function DELETE(
 // PUT /api/movies/[id]/clips - Reorder clips in a movie
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const movieId = params.id
+    const movieId = (await params).id
     const body = await request.json()
     const { clipOrders } = body // Array of { clipId, position }
 
