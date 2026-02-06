@@ -184,8 +184,22 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
       referenceAssets: instance.referenceImages?.length || 0,
     })
 
-    // Debug: Log the full request body to verify structure
-    console.log('[Veo] Full request body:', JSON.stringify(requestBody, null, 2))
+    // Debug: Log the referenceImages structure in detail
+    if (instance.referenceImages && instance.referenceImages.length > 0) {
+      console.log('[Veo] Reference Images Array:')
+      instance.referenceImages.forEach((ref, index) => {
+        console.log(`[Veo]   [${index}]:`, {
+          referenceType: ref.referenceType,
+          imageType: ref.image.gcsUri ? 'gcsUri' : 'base64',
+          gcsUri: ref.image.gcsUri?.substring(0, 80),
+          mimeType: ref.image.mimeType,
+        })
+      })
+    }
+
+    // Debug: Log the full request body structure
+    console.log('[Veo] Request instances[0] keys:', Object.keys(instance))
+    console.log('[Veo] Request parameters:', JSON.stringify(requestBody.parameters, null, 2))
 
     const response = await fetch(`${endpoint}:predictLongRunning`, {
       method: 'POST',
