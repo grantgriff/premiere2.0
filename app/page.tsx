@@ -14,11 +14,13 @@ export default function Home() {
   const [activeView, setActiveView] = useState<'studio' | 'analytics'>('studio')
   const { user, loading } = useAuth()
   const setCharacters = useAppStore((state) => state.setCharacters)
+  const setMovies = useAppStore((state) => state.setMovies)
 
-  // Load characters on app initialization to trigger auto-clean of stale IDs
+  // Load characters and movies on app initialization
   useEffect(() => {
     if (user?.id) {
       loadCharacters()
+      loadMovies()
     }
   }, [user?.id])
 
@@ -39,6 +41,31 @@ export default function Home() {
       }
     } catch (error) {
       console.error('[App] Failed to load characters on initialization:', error)
+    }
+  }
+
+  const loadMovies = async () => {
+    if (!user?.id) return
+
+    try {
+      const response = await fetch(`/api/movies?userId=${user.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.movies) {
+          setMovies(data.movies.map((m: Record<string, unknown>) => ({
+            ...m,
+            createdAt: new Date(m.createdAt as string),
+            updatedAt: new Date(m.updatedAt as string),
+            clips: (m.clips as any[])?.map((c: Record<string, unknown>) => ({
+              ...c,
+              createdAt: new Date(c.createdAt as string),
+            })) || []
+          })))
+          console.log(`[App] Loaded ${data.movies.length} movie(s) on initialization`)
+        }
+      }
+    } catch (error) {
+      console.error('[App] Failed to load movies on initialization:', error)
     }
   }
 

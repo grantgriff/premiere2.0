@@ -51,18 +51,25 @@ function groupConversationsByDate(conversations: Conversation[]) {
 }
 
 export function Sidebar() {
+  const [activeTab, setActiveTab] = useState<'conversations' | 'movies'>('conversations')
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Today', 'Yesterday']))
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
 
-  // Global state
+  // Global state - Conversations
   const user = useAppStore((state) => state.user)
   const conversations = useAppStore((state) => state.conversations)
   const activeConversationId = useAppStore((state) => state.activeConversationId)
   const setActiveConversation = useAppStore((state) => state.setActiveConversation)
   const deleteConversation = useAppStore((state) => state.deleteConversation)
   const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
+
+  // Global state - Movies
+  const movies = useAppStore((state) => state.movies)
+  const activeMovieId = useAppStore((state) => state.activeMovieId)
+  const setActiveMovie = useAppStore((state) => state.setActiveMovie)
+  const deleteMovie = useAppStore((state) => state.deleteMovie)
 
   // Filter and group conversations
   const filteredConversations = useMemo(() => {
@@ -146,15 +153,41 @@ export function Sidebar() {
 
   return (
     <aside className="w-64 h-full flex flex-col bg-[#171717] border-r border-[#2a2a2a]">
-      {/* Header with New Chat */}
+      {/* Header with New Button */}
       <div className="p-3">
         <button
           onClick={handleNewConversation}
           className="w-full h-10 rounded-lg border border-[#3a3a3a] hover:bg-[#2a2a2a] flex items-center justify-center gap-2 text-sm text-foreground transition-colors"
         >
           <Plus className="w-4 h-4" />
-          New video
+          {activeTab === 'conversations' ? 'New video' : 'New movie'}
         </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="px-3 pb-2">
+        <div className="flex items-center gap-1 p-1 rounded-lg bg-[#0a0a0a] border border-[#2a2a2a]">
+          <button
+            onClick={() => setActiveTab('conversations')}
+            className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              activeTab === 'conversations'
+                ? 'bg-[#2a2a2a] text-foreground'
+                : 'text-foreground-secondary hover:text-foreground'
+            }`}
+          >
+            Conversations
+          </button>
+          <button
+            onClick={() => setActiveTab('movies')}
+            className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              activeTab === 'movies'
+                ? 'bg-[#2a2a2a] text-foreground'
+                : 'text-foreground-secondary hover:text-foreground'
+            }`}
+          >
+            Movies
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -163,7 +196,7 @@ export function Sidebar() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary" />
           <input
             type="text"
-            placeholder="Search conversations..."
+            placeholder={activeTab === 'conversations' ? 'Search conversations...' : 'Search movies...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-9 pl-9 pr-3 rounded-lg bg-[#0a0a0a] border border-[#2a2a2a] text-sm text-foreground placeholder:text-foreground-secondary focus:outline-none focus:border-[#3a3a3a]"
