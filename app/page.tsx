@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { VideoPanel } from '@/components/layout/VideoPanel'
+import { MultiModelVideoPanel } from '@/components/layout/MultiModelVideoPanel'
 import { ChatPanel } from '@/components/layout/ChatPanel'
 import { AnalyticsDashboard } from '@/components/ui/AnalyticsDashboard'
 import { MovieTimeline } from '@/components/ui/MovieTimeline'
@@ -16,6 +17,8 @@ export default function Home() {
   const { user, loading } = useAuth()
   const setCharacters = useAppStore((state) => state.setCharacters)
   const setMovies = useAppStore((state) => state.setMovies)
+  const multiModelMode = useAppStore((state) => state.multiModelMode)
+  const multiModelGenerations = useAppStore((state) => state.multiModelGenerations)
   const activeMovie = useActiveMovie()
 
   // Load characters and movies on app initialization
@@ -159,8 +162,12 @@ export default function Home() {
           {activeView === 'studio' ? (
             <>
               <div className="flex-1 flex overflow-hidden">
-                {/* Center Panel - Flexible */}
-                <VideoPanel />
+                {/* Center Panel - Conditional based on multi-model mode */}
+                {multiModelMode ? (
+                  <MultiModelVideoPanel generations={multiModelGenerations} />
+                ) : (
+                  <VideoPanel />
+                )}
 
                 {/* Right Sidebar - 360px fixed */}
                 <ChatPanel />

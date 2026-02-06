@@ -252,7 +252,9 @@ export function ChatPanel() {
           styleReferences,
           selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
           (updatedStates) => {
-            setMultiModelStates(new Map(updatedStates))
+            // Convert Map to array for store
+            const generationsArray = Array.from(updatedStates.values())
+            setMultiModelGenerations(generationsArray)
           }
         )
 
