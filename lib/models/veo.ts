@@ -178,6 +178,9 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
       referenceAssets: instance.referenceImages?.length || 0,
     })
 
+    // Debug: Log the full request body to verify structure
+    console.log('[Veo] Full request body:', JSON.stringify(requestBody, null, 2))
+
     const response = await fetch(`${endpoint}:predictLongRunning`, {
       method: 'POST',
       headers: {
