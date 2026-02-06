@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
+// Cloud Run concatenation service URL
+// Set this environment variable after deploying the concatenation service
+const CONCATENATOR_URL = process.env.CONCATENATOR_SERVICE_URL
+
 /**
  * POST /api/movies/[id]/export - Export a movie
  *
- * NOTE: True video concatenation requires FFmpeg or a video processing service.
- * This implementation provides:
- * 1. A manifest with all video URLs in order
- * 2. For future: Integration with video processing service
+ * Concatenates all clips in a movie into a single video file.
+ * Uses Google Cloud Run service with FFmpeg for video processing.
  *
- * For production, consider:
- * - AWS MediaConvert
- * - Google Cloud Video Intelligence API
- * - Cloudflare Stream
- * - Custom FFmpeg service
+ * Deployment Required:
+ * 1. Deploy services/video-concatenator to Cloud Run
+ * 2. Set CONCATENATOR_SERVICE_URL environment variable
+ * 3. Ensure service has access to GCS bucket
+ *
+ * See services/video-concatenator/README.md for deployment instructions.
  */
 export async function POST(
   request: NextRequest,
@@ -67,39 +70,84 @@ export async function POST(
       )
     }
 
-    // For now, return manifest for client-side processing
-    // or future server-side video concatenation
-    const manifest = {
-      movieId: movie.id,
-      title: movie.title,
-      clips: sortedClips.map((clip: any, index: number) => ({
-        position: index,
-        videoUrl: clip.video?.video_url,
-        duration: clip.video?.duration,
-        prompt: clip.video?.prompt,
-        model: clip.video?.model,
-      })),
-      totalDuration: sortedClips.reduce(
-        (sum: number, clip: any) => sum + (clip.video?.duration || 0),
-        0
-      ),
-      exportedAt: new Date().toISOString(),
+    // Check if concatenation service is configured
+    if (!CONCATENATOR_URL) {
+      console.warn('[Export] CONCATENATOR_SERVICE_URL not configured')
+
+      // Return manifest for manual processing or client-side handling
+      const manifest = {
+        movieId: movie.id,
+        title: movie.title,
+        clips: sortedClips.map((clip: any, index: number) => ({
+          position: index,
+          videoUrl: clip.video?.video_url,
+          duration: clip.video?.duration,
+          prompt: clip.video?.prompt,
+          model: clip.video?.model,
+        })),
+        totalDuration: sortedClips.reduce(
+          (sum: number, clip: any) => sum + (clip.video?.duration || 0),
+          0
+        ),
+      }
+
+      return NextResponse.json({
+        success: true,
+        exportUrl: videoUrls[0], // Fallback: return first clip
+        manifest,
+        note: 'Video concatenation service not configured. Deploy services/video-concatenator to Cloud Run and set CONCATENATOR_SERVICE_URL environment variable. See services/video-concatenator/README.md for instructions.',
+      })
     }
 
-    // TODO: Implement actual video concatenation
-    // Options:
-    // 1. Use FFmpeg via serverless function (AWS Lambda, Google Cloud Functions)
-    // 2. Use cloud video processing service (MediaConvert, Cloud Video Intelligence)
-    // 3. Client-side concatenation using WebCodecs API (browser support varies)
-    // 4. Third-party API (Cloudinary, Mux, etc.)
+    console.log(`[Export] Calling concatenation service: ${CONCATENATOR_URL}`)
+    console.log(`[Export] Concatenating ${videoUrls.length} videos for movie: ${movie.title}`)
 
-    // For now, return the first video URL as a placeholder
-    // In production, this would be the concatenated video URL
+    // Call Cloud Run concatenation service
+    const concatResponse = await fetch(`${CONCATENATOR_URL}/concatenate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        videoUrls: videoUrls,
+        outputFileName: movie.title.replace(/[^a-z0-9]/gi, '_'),
+      }),
+    })
+
+    if (!concatResponse.ok) {
+      const errorData = await concatResponse.json().catch(() => ({}))
+      console.error('[Export] Concatenation service error:', errorData)
+
+      return NextResponse.json(
+        {
+          error: errorData.error || `Concatenation service returned ${concatResponse.status}`,
+          details: errorData,
+        },
+        { status: 500 }
+      )
+    }
+
+    const { success, outputUrl, error: concatError } = await concatResponse.json()
+
+    if (!success || !outputUrl) {
+      return NextResponse.json(
+        { error: concatError || 'Concatenation failed' },
+        { status: 500 }
+      )
+    }
+
+    console.log(`[Export] Success! Output URL: ${outputUrl}`)
+
+    // Update movie with export URL (optional - for caching)
+    await supabase
+      .from('movies')
+      .update({
+        thumbnail_url: outputUrl, // Store export URL in thumbnail_url field
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', movieId)
+
     return NextResponse.json({
       success: true,
-      exportUrl: videoUrls[0], // Placeholder: returns first clip
-      manifest,
-      note: 'Video concatenation requires additional infrastructure. Currently returning first clip. See API code for integration options.',
+      exportUrl: outputUrl,
     })
   } catch (error) {
     console.error('[Export Movie API] Exception:', error)
