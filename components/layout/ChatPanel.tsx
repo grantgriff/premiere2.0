@@ -19,7 +19,7 @@ import { CharacterMention, extractCharacterMentions } from '@/components/ui/Char
 import { CharacterManager } from '@/components/ui/CharacterManager'
 import { YouTubeSearchPanel, YouTubeVideo } from '@/components/ui/YouTubeSearchPanel'
 import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
-import { startMultiModelGeneration, GenerationStateMap } from '@/lib/multiModelGeneration'
+import { startMultiModelGeneration } from '@/lib/multiModelGeneration'
 
 interface UploadedFile {
   id: string
@@ -59,7 +59,6 @@ export function ChatPanel() {
   const [selectedYouTubeVideos, setSelectedYouTubeVideos] = useState<YouTubeVideo[]>([])
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
-  const [multiModelStates, setMultiModelStates] = useState<GenerationStateMap>(new Map())
   const inputRef = useRef<HTMLTextAreaElement>(null) as React.RefObject<HTMLTextAreaElement>
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -76,6 +75,7 @@ export function ChatPanel() {
   const toggleModelSelection = useAppStore((state) => state.toggleModelSelection)
   const multiModelMode = useAppStore((state) => state.multiModelMode)
   const setMultiModelMode = useAppStore((state) => state.setMultiModelMode)
+  const setMultiModelGenerations = useAppStore((state) => state.setMultiModelGenerations)
   const selectedDuration = useAppStore((state) => state.selectedDuration)
   const setSelectedDuration = useAppStore((state) => state.setSelectedDuration)
   const isGenerating = useAppStore((state) => state.isGenerating)
