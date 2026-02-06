@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     // Sort clips by position within each movie
     const moviesWithSortedClips = movies?.map(movie => ({
       ...movie,
-      clips: movie.clips?.sort((a, b) => a.position - b.position) || []
+      clips: movie.clips?.sort((a: any, b: any) => a.position - b.position) || []
     }))
 
     return NextResponse.json({ movies: moviesWithSortedClips })
