@@ -7,7 +7,7 @@ import { generateId } from '../utils'
 
 // Vertex AI endpoints
 const VERTEX_AI_REGION = 'us-central1'
-const VEO_MODEL = 'veo-3.1-fast-generate-001'
+const VEO_MODEL = 'veo-3.1-generate-001' // Using standard model (not fast) for referenceImages support
 
 // Cache for auth client
 let authClientCache: GoogleAuth | null = null
