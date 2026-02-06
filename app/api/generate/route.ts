@@ -34,8 +34,17 @@ export async function POST(request: NextRequest) {
     const userId = authUser.id
 
     const body = await request.json()
-    const { prompt, model, duration, conversationId, styleReferenceUrls, styleReferences, characterIds } =
-      body
+    const {
+      prompt,
+      model,
+      duration,
+      conversationId,
+      styleReferenceUrls,
+      styleReferences,
+      characterIds,
+      firstFrameUrl,
+      lastFrameUrl,
+    } = body
 
     // Validate required fields
     if (!prompt || !model || !duration) {
@@ -275,11 +284,59 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Handle frame chaining for video-to-video continuity
+    let firstFrameGcsUri: string | undefined
+    let lastFrameGcsUri: string | undefined
+
+    if ((firstFrameUrl || lastFrameUrl) && model === 'veo3_1') {
+      console.log('[Generate] Frame chaining requested for Veo 3.1')
+
+      // Import GCS upload utility dynamically
+      const { downloadAndUploadToGCS, getDefaultGCSBucket } = await import('@/lib/gcsUpload')
+      const bucket = getDefaultGCSBucket()
+
+      if (firstFrameUrl) {
+        console.log('[Generate] Converting first frame to GCS:', firstFrameUrl.substring(0, 80))
+        firstFrameGcsUri = await downloadAndUploadToGCS(
+          firstFrameUrl,
+          bucket,
+          `frames/${userId}/${videoId}_first.jpg`
+        ) || undefined
+        if (firstFrameGcsUri) {
+          console.log('[Generate] First frame GCS URI:', firstFrameGcsUri)
+        } else {
+          console.warn('[Generate] Failed to upload first frame to GCS')
+        }
+      }
+
+      if (lastFrameUrl) {
+        console.log('[Generate] Converting last frame to GCS:', lastFrameUrl.substring(0, 80))
+        lastFrameGcsUri = await downloadAndUploadToGCS(
+          lastFrameUrl,
+          bucket,
+          `frames/${userId}/${videoId}_last.jpg`
+        ) || undefined
+        if (lastFrameGcsUri) {
+          console.log('[Generate] Last frame GCS URI:', lastFrameGcsUri)
+        } else {
+          console.warn('[Generate] Failed to upload last frame to GCS')
+        }
+      }
+
+      // Frame chaining mode takes priority - don't use character references
+      if (firstFrameGcsUri || lastFrameGcsUri) {
+        console.log('[Generate] Using frame chaining mode - character references will be ignored')
+        characterGcsUris = []
+        characterReferenceUrls = []
+      }
+    }
+
     // Actually call the video generation API
     console.log(`[Generate] Starting ${model} generation for video ${videoId}`)
     console.log(`[Generate] Style reference: ${primaryStyleUrl || 'none'}`)
     console.log(`[Generate] Character HTTP URLs: ${characterReferenceUrls.length > 0 ? characterReferenceUrls.length : 'none'}`)
     console.log(`[Generate] Character GCS URIs: ${characterGcsUris.length > 0 ? characterGcsUris.length : 'none'}`)
+    console.log(`[Generate] Frame chaining: ${firstFrameGcsUri || lastFrameGcsUri ? 'YES' : 'NO'}`)
 
     const genResult = await generateVideo(model as VideoModelId, {
       prompt: promptToUse, // Use the enhanced prompt here
@@ -288,6 +345,8 @@ export async function POST(request: NextRequest) {
       styleReferenceUrl: primaryStyleUrl,
       characterReferenceUrls: characterReferenceUrls.length > 0 ? characterReferenceUrls : undefined,
       characterGcsUris: characterGcsUris.length > 0 ? characterGcsUris : undefined,
+      firstFrameGcsUri,
+      lastFrameGcsUri,
     })
 
     if (!genResult.success || !genResult.jobId) {
