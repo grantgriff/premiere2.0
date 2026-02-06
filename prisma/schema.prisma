@@ -28,6 +28,7 @@ model User {
   characters      Character[]
   videos          Video[]
   styleReferences StyleReference[]
+  movies          Movie[]
 
   @@map("users")
 }
@@ -149,4 +150,42 @@ model GenerationJob {
   completedAt    DateTime? @map("completed_at")
 
   @@map("generation_jobs")
+}
+
+// ===========================================
+// Movie Model (for building multi-clip commercials/ads)
+// ===========================================
+model Movie {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  title       String
+  description String?
+  thumbnailUrl String?  @map("thumbnail_url") // First clip's thumbnail
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relationships
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clips MovieClip[]
+
+  @@map("movies")
+}
+
+// ===========================================
+// Movie Clip Model (individual shots/segments in a movie)
+// ===========================================
+model MovieClip {
+  id             String   @id @default(uuid())
+  movieId        String   @map("movie_id")
+  videoId        String   @map("video_id")
+  position       Int      // Order in the movie (0, 1, 2, ...)
+  firstFrameUrl  String?  @map("first_frame_url") // Extracted frame for chaining to next clip
+  lastFrameUrl   String?  @map("last_frame_url")  // Extracted last frame to feed to next generation
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  movie Movie @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  @@unique([movieId, position]) // Ensure no duplicate positions within a movie
+  @@map("movie_clips")
 }
