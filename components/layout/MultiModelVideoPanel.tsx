@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { VideoModel, Video, useAppStore, Movie } from '@/lib/store'
 import { GenerationPanel } from '../ui/GenerationPanel'
 import { Film, X } from 'lucide-react'
+import { extractBothFrames } from '@/lib/frameExtraction'
+import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
+import { generateId } from '@/lib/utils'
 
 interface GenerationState {
   model: VideoModel
@@ -154,7 +157,7 @@ export function MultiModelVideoPanel({ generations }: MultiModelVideoPanelProps)
   }
 
   const handleMovieSelect = async (movieId: string) => {
-    if (!selectedVideo || !user) return
+    if (!selectedVideo || !user || !selectedVideo.videoUrl) return
 
     try {
       // Get the movie to determine next position
@@ -164,6 +167,29 @@ export function MultiModelVideoPanel({ generations }: MultiModelVideoPanelProps)
 
       const nextPosition = movie.clips.length
 
+      // Extract first and last frames
+      console.log('[MultiModelPanel] Extracting frames from video...')
+      let firstFrameUrl: string | null = null
+      let lastFrameUrl: string | null = null
+
+      try {
+        const { firstFrame, lastFrame } = await extractBothFrames(selectedVideo.videoUrl)
+
+        // Upload frames to storage
+        const frameBasePath = `${user.id}/frames/${generateId()}`
+        const [firstUrl, lastUrl] = await Promise.all([
+          uploadToStorage(STORAGE_BUCKETS.IMAGES, `${frameBasePath}_first.jpg`, firstFrame),
+          uploadToStorage(STORAGE_BUCKETS.IMAGES, `${frameBasePath}_last.jpg`, lastFrame),
+        ])
+
+        firstFrameUrl = firstUrl
+        lastFrameUrl = lastUrl
+        console.log('[MultiModelPanel] Frames extracted and uploaded')
+      } catch (frameError) {
+        console.warn('[MultiModelPanel] Failed to extract frames, continuing without them:', frameError)
+        // Continue without frames - not critical
+      }
+
       // Add clip to movie
       const response = await fetch(`/api/movies/${movieId}/clips`, {
         method: 'POST',
@@ -171,8 +197,8 @@ export function MultiModelVideoPanel({ generations }: MultiModelVideoPanelProps)
         body: JSON.stringify({
           videoId: selectedVideo.id,
           position: nextPosition,
-          firstFrameUrl: null, // TODO: Extract first frame
-          lastFrameUrl: null, // TODO: Extract last frame
+          firstFrameUrl,
+          lastFrameUrl,
         }),
       })
 
@@ -183,7 +209,7 @@ export function MultiModelVideoPanel({ generations }: MultiModelVideoPanelProps)
           ...clip,
           createdAt: new Date(clip.createdAt),
         })
-        console.log('[MultiModelPanel] Added video to movie:', movieId)
+        console.log('[MultiModelPanel] Added video to movie with frames:', movieId)
         setShowMovieSelector(false)
         setSelectedVideo(null)
       }
