@@ -330,78 +330,123 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
     if (data.done && data.response?.videos?.[0]) {
       const video = data.response.videos[0]
 
-      // Video can be in GCS or base64
-      if (video.gcsUri) {
-        // Convert gs:// URI to public URL
-        // Note: The GCS bucket needs to be publicly accessible or you need to generate a signed URL
-        console.log('[Veo] Video stored at:', video.gcsUri)
+      // Video can be in GCS or base64 - both need to be uploaded to Supabase for public HTTP access
+      let videoBlob: Blob
 
-        return {
-          status: 'completed',
-          videoUrl: video.gcsUri, // You may need to convert this to a public HTTP URL
-          thumbnailUrl: undefined,
-        }
-      } else if (video.bytesBase64Encoded) {
-        // Video returned as base64 - upload to Supabase storage
-        console.log('[Veo] Video returned as base64, uploading to Supabase storage...')
+      if (video.gcsUri) {
+        // Video stored in GCS - download it and re-upload to Supabase for public access
+        console.log('[Veo] Video stored at GCS:', video.gcsUri)
+        console.log('[Veo] Downloading from GCS to upload to Supabase...')
 
         try {
-          // Convert base64 to Blob
+          // Get OAuth2 access token for GCS access
+          const accessToken = await getAccessToken()
+          if (!accessToken) {
+            return {
+              status: 'failed',
+              error: 'Failed to authenticate with Google Cloud for GCS download'
+            }
+          }
+
+          // Convert gs://bucket/path to https://storage.googleapis.com/bucket/path
+          const gcsUrl = video.gcsUri.replace('gs://', 'https://storage.googleapis.com/')
+
+          const gcsResponse = await fetch(gcsUrl, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+            },
+          })
+
+          if (!gcsResponse.ok) {
+            console.error('[Veo] Failed to download from GCS:', gcsResponse.status, gcsResponse.statusText)
+            return {
+              status: 'failed',
+              error: `Failed to download video from GCS: ${gcsResponse.status}`
+            }
+          }
+
+          videoBlob = await gcsResponse.blob()
+          console.log('[Veo] Successfully downloaded video from GCS')
+
+        } catch (error) {
+          console.error('[Veo] Error downloading from GCS:', error)
+          return {
+            status: 'failed',
+            error: `Failed to download from GCS: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        }
+
+      } else if (video.bytesBase64Encoded) {
+        // Video returned as base64 - convert to Blob
+        console.log('[Veo] Video returned as base64, converting to blob...')
+
+        try {
           const base64Data = video.bytesBase64Encoded
           const binaryString = atob(base64Data)
           const bytes = new Uint8Array(binaryString.length)
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i)
           }
-          const videoBlob = new Blob([bytes], { type: video.mimeType || 'video/mp4' })
+          videoBlob = new Blob([bytes], { type: video.mimeType || 'video/mp4' })
+          console.log('[Veo] Successfully converted base64 to blob')
 
-          // Upload to Supabase storage using admin client (bypasses RLS)
-          const videoId = generateId()
-          const fileName = `veo_${videoId}.mp4`
-          const filePath = `generated/${fileName}`
-
-          console.log('[Veo] Uploading to Supabase storage with admin client...')
-          const supabaseAdmin = getSupabaseAdmin()
-          const { data, error } = await supabaseAdmin.storage
-            .from(STORAGE_BUCKETS.VIDEOS)
-            .upload(filePath, videoBlob, {
-              contentType: video.mimeType || 'video/mp4',
-              cacheControl: '3600',
-              upsert: false,
-            })
-
-          if (error) {
-            console.error('[Veo] Failed to upload video to storage:', error)
-            return {
-              status: 'failed',
-              error: `Failed to upload video: ${error.message}`
-            }
-          }
-
-          // Get public URL
-          const { data: urlData } = supabaseAdmin.storage
-            .from(STORAGE_BUCKETS.VIDEOS)
-            .getPublicUrl(data.path)
-
-          console.log('[Veo] Video uploaded successfully:', urlData.publicUrl)
-
-          return {
-            status: 'completed',
-            videoUrl: urlData.publicUrl,
-            thumbnailUrl: undefined,
-          }
-        } catch (uploadError) {
-          console.error('[Veo] Error uploading base64 video:', uploadError)
+        } catch (error) {
+          console.error('[Veo] Error converting base64:', error)
           return {
             status: 'failed',
-            error: uploadError instanceof Error ? uploadError.message : 'Failed to upload video'
+            error: `Failed to decode base64 video: ${error instanceof Error ? error.message : 'Unknown error'}`
           }
+        }
+
+      } else {
+        return {
+          status: 'failed',
+          error: 'Video has neither gcsUri nor bytesBase64Encoded'
         }
       }
 
-      return {
-        status: 'failed',
-        error: 'Video completed but no URL or data returned'
+      // Upload to Supabase storage using admin client (bypasses RLS)
+      try {
+        const videoId = generateId()
+        const fileName = `veo_${videoId}.mp4`
+        const filePath = `generated/${fileName}`
+
+        console.log('[Veo] Uploading to Supabase storage with admin client...')
+        const supabaseAdmin = getSupabaseAdmin()
+        const { data: uploadData, error } = await supabaseAdmin.storage
+          .from(STORAGE_BUCKETS.VIDEOS)
+          .upload(filePath, videoBlob, {
+            contentType: video.mimeType || 'video/mp4',
+            cacheControl: '3600',
+            upsert: false,
+          })
+
+        if (error) {
+          console.error('[Veo] Failed to upload video to storage:', error)
+          return {
+            status: 'failed',
+            error: `Failed to upload video: ${error.message}`
+          }
+        }
+
+        // Get public URL
+        const { data: urlData } = supabaseAdmin.storage
+          .from(STORAGE_BUCKETS.VIDEOS)
+          .getPublicUrl(uploadData.path)
+
+        console.log('[Veo] Video uploaded successfully:', urlData.publicUrl)
+
+        return {
+          status: 'completed',
+          videoUrl: urlData.publicUrl,
+          thumbnailUrl: undefined,
+        }
+      } catch (error) {
+        console.error('[Veo] Upload error:', error)
+        return {
+          status: 'failed',
+          error: `Failed to upload video: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }
       }
     }
 
