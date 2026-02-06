@@ -19,6 +19,7 @@ import { CharacterMention, extractCharacterMentions } from '@/components/ui/Char
 import { CharacterManager } from '@/components/ui/CharacterManager'
 import { YouTubeSearchPanel, YouTubeVideo } from '@/components/ui/YouTubeSearchPanel'
 import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
+import { startMultiModelGeneration, GenerationStateMap } from '@/lib/multiModelGeneration'
 
 interface UploadedFile {
   id: string
@@ -58,6 +59,7 @@ export function ChatPanel() {
   const [selectedYouTubeVideos, setSelectedYouTubeVideos] = useState<YouTubeVideo[]>([])
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [multiModelStates, setMultiModelStates] = useState<GenerationStateMap>(new Map())
   const inputRef = useRef<HTMLTextAreaElement>(null) as React.RefObject<HTMLTextAreaElement>
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -70,6 +72,10 @@ export function ChatPanel() {
   const toggleCharacterSelection = useAppStore((state) => state.toggleCharacterSelection)
   const selectedModel = useAppStore((state) => state.selectedModel)
   const setSelectedModel = useAppStore((state) => state.setSelectedModel)
+  const selectedModels = useAppStore((state) => state.selectedModels)
+  const toggleModelSelection = useAppStore((state) => state.toggleModelSelection)
+  const multiModelMode = useAppStore((state) => state.multiModelMode)
+  const setMultiModelMode = useAppStore((state) => state.setMultiModelMode)
   const selectedDuration = useAppStore((state) => state.selectedDuration)
   const setSelectedDuration = useAppStore((state) => state.setSelectedDuration)
   const isGenerating = useAppStore((state) => state.isGenerating)
@@ -222,6 +228,52 @@ export function ChatPanel() {
         console.log(`[ChatPanel] Enhanced prompt with explicit character reference:`, enhancedPrompt)
       }
 
+      // Multi-model generation
+      if (multiModelMode) {
+        if (selectedModels.length < 2 || selectedModels.length > 4) {
+          setIsGenerating(false)
+          const errorMsg = 'Please select 2-4 models for multi-model generation'
+          addMessage(convId, {
+            id: generateId(),
+            role: 'assistant' as const,
+            content: errorMsg,
+            timestamp: new Date(),
+          })
+          createMessageApi(convId, 'assistant', errorMsg)
+          return
+        }
+
+        // Start multi-model generation
+        const states = await startMultiModelGeneration(
+          selectedModels,
+          enhancedPrompt,
+          selectedDuration,
+          convId,
+          styleReferences,
+          selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
+          (updatedStates) => {
+            setMultiModelStates(new Map(updatedStates))
+          }
+        )
+
+        setIsGenerating(false)
+        const modelNames = selectedModels.map(m => MODELS.find(model => model.id === m)?.name).join(', ')
+        const completionMsg = `Multi-model generation complete! Generated with: ${modelNames}`
+        addMessage(convId, {
+          id: generateId(),
+          role: 'assistant' as const,
+          content: completionMsg,
+          timestamp: new Date(),
+        })
+        createMessageApi(convId, 'assistant', completionMsg)
+
+        // Clear uploaded files after successful submission
+        setUploadedFiles([])
+        setSelectedYouTubeVideos([])
+        return
+      }
+
+      // Single model generation
       // Start generation with all references
       // Note: userId is now extracted from session cookie on the server
       const response = await startGeneration({
@@ -538,21 +590,47 @@ export function ChatPanel() {
 
       {/* Model Selector */}
       <div className="px-4 py-3 border-t border-border">
-        <label className="text-xs text-foreground-secondary mb-2 block">Model</label>
-        <div className="flex flex-wrap gap-2">
-          {MODELS.map((model) => (
-            <button
-              key={model.id}
-              onClick={() => !model.disabled && setSelectedModel(model.id)}
-              className={`model-chip text-xs ${selectedModel === model.id ? 'model-chip-active' : ''} ${model.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-              title={model.disabled ? 'Coming soon' : `Generation time: ${model.speed}`}
-              disabled={isGenerating || model.disabled}
-            >
-              {model.name}
-              {model.disabled && <span className="ml-1 text-[10px]">(soon)</span>}
-            </button>
-          ))}
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs text-foreground-secondary">Model</label>
+          <button
+            onClick={() => setMultiModelMode(!multiModelMode)}
+            className="text-xs text-accent hover:underline"
+            disabled={isGenerating}
+          >
+            {multiModelMode ? 'Single Model' : 'Multi-Model'}
+          </button>
         </div>
+        <div className="flex flex-wrap gap-2">
+          {MODELS.map((model) => {
+            const isSelected = multiModelMode
+              ? selectedModels.includes(model.id)
+              : selectedModel === model.id
+            return (
+              <button
+                key={model.id}
+                onClick={() => {
+                  if (model.disabled) return
+                  if (multiModelMode) {
+                    toggleModelSelection(model.id)
+                  } else {
+                    setSelectedModel(model.id)
+                  }
+                }}
+                className={`model-chip text-xs ${isSelected ? 'model-chip-active' : ''} ${model.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                title={model.disabled ? 'Coming soon' : `Generation time: ${model.speed}`}
+                disabled={isGenerating || model.disabled}
+              >
+                {model.name}
+                {model.disabled && <span className="ml-1 text-[10px]">(soon)</span>}
+              </button>
+            )
+          })}
+        </div>
+        {multiModelMode && (
+          <p className="text-xs text-foreground-secondary mt-2">
+            Select 2-4 models to compare ({selectedModels.length} selected)
+          </p>
+        )}
       </div>
 
       {/* Duration Selector */}

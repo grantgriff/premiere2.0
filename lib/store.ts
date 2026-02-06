@@ -146,6 +146,18 @@ interface AppState {
   selectedModels: VideoModel[]
   toggleModelSelection: (model: VideoModel) => void
   clearModelSelection: () => void
+  multiModelGenerations: Array<{
+    model: VideoModel
+    status: 'queued' | 'processing' | 'completed' | 'failed'
+    progress: number
+    video?: Video
+  }>
+  setMultiModelGenerations: (generations: Array<{
+    model: VideoModel
+    status: 'queued' | 'processing' | 'completed' | 'failed'
+    progress: number
+    video?: Video
+  }>) => void
 
   // UI State
   selectedModel: VideoModel
@@ -273,6 +285,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         : [...state.selectedModels, model],
     })),
   clearModelSelection: () => set({ selectedModels: [] }),
+  multiModelGenerations: [],
+  setMultiModelGenerations: (generations) => set({ multiModelGenerations: generations }),
 
   // UI State
   selectedModel: 'veo3_1',
