@@ -98,6 +98,14 @@ export interface MovieClip {
   firstFrameUrl: string | null
   lastFrameUrl: string | null
   createdAt: Date
+  video?: {
+    id: string
+    videoUrl: string | null
+    thumbnailUrl: string | null
+    duration: number
+    prompt: string
+    model: VideoModel
+  }
 }
 
 export interface Movie {

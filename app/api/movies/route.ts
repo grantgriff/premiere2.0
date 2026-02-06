@@ -23,7 +23,15 @@ export async function GET(request: NextRequest) {
           position,
           first_frame_url,
           last_frame_url,
-          created_at
+          created_at,
+          video:videos!movie_clips_video_id_fkey(
+            id,
+            video_url,
+            thumbnail_url,
+            duration,
+            prompt,
+            model
+          )
         )
       `)
       .eq('user_id', userId)
