@@ -20,6 +20,8 @@ export interface GenerationRequest {
   styleReferenceUrls?: string[]
   styleReferences?: StyleReference[]
   characterIds?: string[]
+  firstFrameUrl?: string
+  lastFrameUrl?: string
 }
 
 export interface GenerationResponse {

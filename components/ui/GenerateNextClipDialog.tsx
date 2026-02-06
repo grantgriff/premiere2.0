@@ -80,7 +80,6 @@ export function GenerateNextClipDialog({
         prompt: prompt.trim(),
         model: selectedModel,
         duration: selectedDuration,
-        conversationId: null, // No conversation for movie clips
         // Frame chaining parameters - Veo will use frame chaining mode
         lastFrameUrl: previousClip.lastFrameUrl,
       })
