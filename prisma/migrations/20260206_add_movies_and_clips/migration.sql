@@ -1,7 +1,7 @@
 -- CreateTable
 CREATE TABLE IF NOT EXISTS "movies" (
-    "id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "user_id" UUID NOT NULL,
     "title" TEXT NOT NULL,
     "description" TEXT,
     "thumbnail_url" TEXT,
@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS "movies" (
 
 -- CreateTable
 CREATE TABLE IF NOT EXISTS "movie_clips" (
-    "id" TEXT NOT NULL,
-    "movie_id" TEXT NOT NULL,
-    "video_id" TEXT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "movie_id" UUID NOT NULL,
+    "video_id" UUID NOT NULL,
     "position" INTEGER NOT NULL,
     "first_frame_url" TEXT,
     "last_frame_url" TEXT,
