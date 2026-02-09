@@ -91,6 +91,21 @@ export async function POST(request: NextRequest) {
 
     console.log('[Movies API] Successfully created movie:', movie.id, 'Title:', movie.title)
     console.log('[Movies API] Movie data:', JSON.stringify(movie))
+
+    // Verify the movie is immediately queryable (check for database replication issues)
+    const { data: verifyMovie, error: verifyError } = await supabase
+      .from('movies')
+      .select('id')
+      .eq('id', movie.id)
+      .maybeSingle()
+
+    if (verifyError || !verifyMovie) {
+      console.error('[Movies API] WARNING: Movie created but not immediately queryable!', verifyError)
+      console.log('[Movies API] This indicates a database replication lag issue')
+    } else {
+      console.log('[Movies API] Movie verified - immediately queryable')
+    }
+
     return NextResponse.json({ movie })
   } catch (error) {
     console.error('[Movies API] Exception:', error)

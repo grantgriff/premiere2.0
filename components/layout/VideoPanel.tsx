@@ -658,6 +658,7 @@ export function VideoPanel() {
       const retryDelays = [500, 1000, 2000, 3000, 5000] // Longer delays for database replication
 
       while (retries <= maxRetries) {
+        console.log(`[VideoPanel] Attempting to add clip (attempt ${retries + 1}/${maxRetries + 1})...`)
         response = await fetch(`/api/movies/${movieId}/clips`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -669,27 +670,35 @@ export function VideoPanel() {
           }),
         })
 
+        console.log(`[VideoPanel] Response status: ${response.status}`)
+
         if (response.ok) {
+          console.log('[VideoPanel] Clip added successfully on attempt', retries + 1)
           break // Success!
         }
 
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.log('[VideoPanel] Error response:', errorData)
 
         // Check if it's a "movie not found" error (foreign key constraint)
         if (errorData.error?.includes('movie_clips_movie_id_fkey') ||
-            errorData.error?.includes('Movie not found')) {
+            errorData.error?.includes('Movie not found') ||
+            errorData.error?.includes('Database error')) {
 
           if (retries < maxRetries) {
             const delay = retryDelays[retries]
-            console.log(`[VideoPanel] Movie not found in DB yet, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries})...`)
+            console.log(`[VideoPanel] Retryable error detected, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries})...`)
+            console.log('[VideoPanel] Error was:', errorData.error)
             await new Promise(resolve => setTimeout(resolve, delay))
             retries++
             continue
+          } else {
+            console.error('[VideoPanel] Max retries exceeded, giving up')
           }
         }
 
         // Non-retryable error or max retries exceeded
-        console.error('[VideoPanel] Failed to add clip:', errorData)
+        console.error('[VideoPanel] Failed to add clip after', retries + 1, 'attempts:', errorData)
         alert(`Failed to add clip to movie: ${errorData.error}`)
         return
       }
