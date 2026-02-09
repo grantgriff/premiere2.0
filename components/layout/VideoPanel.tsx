@@ -536,6 +536,18 @@ export function VideoPanel() {
       const { movie: newMovie } = await createResponse.json()
       console.log('[VideoPanel] Created new movie:', newMovie.id)
 
+      // Add the movie to local state first
+      const addMovie = useAppStore.getState().addMovie
+      addMovie({
+        ...newMovie,
+        createdAt: new Date(newMovie.createdAt),
+        updatedAt: new Date(newMovie.updatedAt),
+        clips: []
+      })
+
+      // Small delay to ensure database has committed the transaction
+      await new Promise(resolve => setTimeout(resolve, 100))
+
       // Add clip to the new movie
       await handleAddToMovie(newMovie.id)
       setNewMovieTitle('')
