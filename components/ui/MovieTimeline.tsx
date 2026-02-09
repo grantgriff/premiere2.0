@@ -101,7 +101,7 @@ export function MovieTimeline() {
     setPlayingClipId(playingClipId === clipId ? null : clipId)
   }
 
-  const handleClickClip = (clip: typeof activeMovie.clips[0]) => {
+  const handleClickClip = (clip: NonNullable<typeof activeMovie>['clips'][0]) => {
     // Set this video as the current video in the main player
     if (clip.video) {
       setCurrentVideo(clip.video)
