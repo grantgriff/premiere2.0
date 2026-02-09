@@ -7,7 +7,8 @@ import { generateId } from '../utils'
 
 // Vertex AI endpoints
 const VERTEX_AI_REGION = 'us-central1'
-const VEO_MODEL = 'veo-3.1-generate-preview' // Preview model with referenceImages support
+const VEO_MODEL_CHARACTER = 'veo-3.1-generate-preview' // Preview model with referenceImages support
+const VEO_MODEL_FRAME_CHAINING = 'veo-3.1-generate-001' // Production model with first/last frame support
 
 // Cache for auth client
 let authClientCache: GoogleAuth | null = null
@@ -42,14 +43,19 @@ async function getAccessToken(): Promise<string | null> {
   }
 }
 
-function getVertexEndpoint(projectId: string): string {
-  return `https://${VERTEX_AI_REGION}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${VERTEX_AI_REGION}/publishers/google/models/${VEO_MODEL}`
+function getVertexEndpoint(projectId: string, model: string): string {
+  return `https://${VERTEX_AI_REGION}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${VERTEX_AI_REGION}/publishers/google/models/${model}`
 }
 
 interface VertexVeoRequest {
   instances: Array<{
     prompt: string
     image?: {
+      bytesBase64Encoded?: string
+      gcsUri?: string
+      mimeType?: string
+    }
+    lastFrame?: {
       bytesBase64Encoded?: string
       gcsUri?: string
       mimeType?: string
@@ -115,11 +121,22 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
   }
 
   try {
-    const endpoint = getVertexEndpoint(projectId)
+    // Determine which mode to use:
+    // - Frame chaining mode: if firstFrameGcsUri OR lastFrameGcsUri is provided
+    // - Character reference mode: otherwise
+    const useFrameChaining = !!(params.firstFrameGcsUri || params.lastFrameGcsUri)
+    const selectedModel = useFrameChaining ? VEO_MODEL_FRAME_CHAINING : VEO_MODEL_CHARACTER
+
+    console.log(`[Veo] Using ${useFrameChaining ? 'FRAME CHAINING' : 'CHARACTER REFERENCE'} mode`)
+    console.log(`[Veo] Model: ${selectedModel}`)
+
+    const endpoint = getVertexEndpoint(projectId, selectedModel)
 
     // Build Vertex AI request format
     const instance: {
       prompt: string
+      image?: { gcsUri: string; mimeType: string }
+      lastFrame?: { gcsUri: string; mimeType: string }
       referenceImages?: Array<{
         image: { gcsUri: string; mimeType: string }
         referenceType: 'asset' | 'style'
@@ -128,34 +145,67 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
       prompt: params.prompt,
     }
 
-    // Add character reference images as assets (not first frame)
-    const characterGcsUris = params.characterGcsUris || []
+    if (useFrameChaining) {
+      // MODE 2: Frame-to-frame chaining
+      // Add first frame (image parameter)
+      if (params.firstFrameGcsUri) {
+        const mimeType = params.firstFrameGcsUri.endsWith('.png')
+          ? 'image/png'
+          : params.firstFrameGcsUri.endsWith('.webp')
+          ? 'image/webp'
+          : 'image/jpeg'
 
-    if (characterGcsUris.length > 0) {
-      instance.referenceImages = []
+        instance.image = {
+          gcsUri: params.firstFrameGcsUri,
+          mimeType,
+        }
+        console.log(`[Veo] First frame: ${params.firstFrameGcsUri.substring(0, 80)}...`)
+      }
 
-      for (const characterImageUri of characterGcsUris) {
-        if (characterImageUri.startsWith('gs://')) {
-          // Determine MIME type from file extension
-          const mimeType = characterImageUri.endsWith('.png')
-            ? 'image/png'
-            : characterImageUri.endsWith('.webp')
-            ? 'image/webp'
-            : 'image/jpeg' // Default to JPEG for .jpg, .jpeg, or unknown
+      // Add last frame (lastFrame parameter)
+      if (params.lastFrameGcsUri) {
+        const mimeType = params.lastFrameGcsUri.endsWith('.png')
+          ? 'image/png'
+          : params.lastFrameGcsUri.endsWith('.webp')
+          ? 'image/webp'
+          : 'image/jpeg'
 
-          instance.referenceImages.push({
-            image: {
-              gcsUri: characterImageUri,
-              mimeType,
-            },
-            referenceType: 'asset', // Use as reference asset, not first frame
-          })
+        instance.lastFrame = {
+          gcsUri: params.lastFrameGcsUri,
+          mimeType,
+        }
+        console.log(`[Veo] Last frame: ${params.lastFrameGcsUri.substring(0, 80)}...`)
+      }
+    } else {
+      // MODE 1: Character reference images
+      const characterGcsUris = params.characterGcsUris || []
 
-          console.log(`[Veo] Adding character as reference asset (not first frame): ${characterImageUri.substring(0, 80)}...`)
-          console.log(`[Veo] MIME type: ${mimeType}`)
-        } else {
-          console.warn('[Veo] Character image is not a GCS URI. Veo requires gs:// URIs in Vertex AI.')
-          console.warn(`[Veo] Skipping: ${characterImageUri.substring(0, 80)}...`)
+      if (characterGcsUris.length > 0) {
+        instance.referenceImages = []
+
+        for (const characterImageUri of characterGcsUris) {
+          if (characterImageUri.startsWith('gs://')) {
+            // Determine MIME type from file extension
+            const mimeType = characterImageUri.endsWith('.png')
+              ? 'image/png'
+              : characterImageUri.endsWith('.webp')
+              ? 'image/webp'
+              : 'image/jpeg' // Default to JPEG for .jpg, .jpeg, or unknown
+
+            instance.referenceImages.push({
+              image: {
+                gcsUri: characterImageUri,
+                mimeType,
+              },
+              referenceType: 'asset', // Use as reference asset, not first frame
+            })
+
+            console.log(`[Veo] Adding character as reference asset: ${characterImageUri.substring(0, 80)}...`)
+            console.log(`[Veo] MIME type: ${mimeType}`)
+          } else {
+            console.warn('[Veo] Character image is not a GCS URI. Veo requires gs:// URIs in Vertex AI.')
+            console.warn(`[Veo] Skipping: ${characterImageUri.substring(0, 80)}...`)
+          }
         }
       }
     }
@@ -180,13 +230,25 @@ export async function generateWithVeo(params: GenerationParams): Promise<Generat
     console.log('[Veo] Vertex AI Request:', {
       endpoint: `${endpoint}:predictLongRunning`,
       projectId,
+      model: selectedModel,
+      mode: useFrameChaining ? 'FRAME_CHAINING' : 'CHARACTER_REFERENCE',
       prompt: params.prompt.substring(0, 100),
+      hasFirstFrame: !!instance.image,
+      hasLastFrame: !!instance.lastFrame,
       referenceAssets: instance.referenceImages?.length || 0,
     })
 
-    // Debug: Log the referenceImages structure in detail
-    if (instance.referenceImages && instance.referenceImages.length > 0) {
-      console.log('[Veo] Reference Images Array:')
+    // Debug: Log mode-specific details
+    if (useFrameChaining) {
+      console.log('[Veo] Frame Chaining Mode:')
+      if (instance.image) {
+        console.log(`[Veo]   First Frame: ${instance.image.gcsUri?.substring(0, 80)}`)
+      }
+      if (instance.lastFrame) {
+        console.log(`[Veo]   Last Frame: ${instance.lastFrame.gcsUri?.substring(0, 80)}`)
+      }
+    } else if (instance.referenceImages && instance.referenceImages.length > 0) {
+      console.log('[Veo] Character Reference Mode - Reference Images Array:')
       instance.referenceImages.forEach((ref, index) => {
         console.log(`[Veo]   [${index}]:`, {
           referenceType: ref.referenceType,
@@ -294,7 +356,9 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
   }
 
   try {
-    const endpoint = getVertexEndpoint(projectId)
+    // For status checks, we use the character model endpoint
+    // The operation name should be valid across both Veo model variants
+    const endpoint = getVertexEndpoint(projectId, VEO_MODEL_CHARACTER)
 
     // Use fetchPredictOperation endpoint as per Vertex AI docs
     const response = await fetch(`${endpoint}:fetchPredictOperation`, {

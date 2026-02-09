@@ -3,22 +3,29 @@
 import { useState, useEffect } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { VideoPanel } from '@/components/layout/VideoPanel'
+import { MultiModelVideoPanel } from '@/components/layout/MultiModelVideoPanel'
 import { ChatPanel } from '@/components/layout/ChatPanel'
 import { AnalyticsDashboard } from '@/components/ui/AnalyticsDashboard'
+import { MovieTimeline } from '@/components/ui/MovieTimeline'
 import { Video, BarChart3, LogOut, User } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { signOut } from '@/lib/auth'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, useActiveMovie } from '@/lib/store'
 
 export default function Home() {
   const [activeView, setActiveView] = useState<'studio' | 'analytics'>('studio')
   const { user, loading } = useAuth()
   const setCharacters = useAppStore((state) => state.setCharacters)
+  const setMovies = useAppStore((state) => state.setMovies)
+  const multiModelMode = useAppStore((state) => state.multiModelMode)
+  const multiModelGenerations = useAppStore((state) => state.multiModelGenerations)
+  const activeMovie = useActiveMovie()
 
-  // Load characters on app initialization to trigger auto-clean of stale IDs
+  // Load characters and movies on app initialization
   useEffect(() => {
     if (user?.id) {
       loadCharacters()
+      loadMovies()
     }
   }, [user?.id])
 
@@ -39,6 +46,31 @@ export default function Home() {
       }
     } catch (error) {
       console.error('[App] Failed to load characters on initialization:', error)
+    }
+  }
+
+  const loadMovies = async () => {
+    if (!user?.id) return
+
+    try {
+      const response = await fetch(`/api/movies?userId=${user.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.movies) {
+          setMovies(data.movies.map((m: Record<string, unknown>) => ({
+            ...m,
+            createdAt: new Date(m.createdAt as string),
+            updatedAt: new Date(m.updatedAt as string),
+            clips: (m.clips as any[])?.map((c: Record<string, unknown>) => ({
+              ...c,
+              createdAt: new Date(c.createdAt as string),
+            })) || []
+          })))
+          console.log(`[App] Loaded ${data.movies.length} movie(s) on initialization`)
+        }
+      }
+    } catch (error) {
+      console.error('[App] Failed to load movies on initialization:', error)
     }
   }
 
@@ -126,14 +158,23 @@ export default function Home() {
         </div>
 
         {/* Content based on active view */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
           {activeView === 'studio' ? (
             <>
-              {/* Center Panel - Flexible */}
-              <VideoPanel />
+              <div className="flex-1 flex overflow-hidden">
+                {/* Center Panel - Conditional based on multi-model mode */}
+                {multiModelMode ? (
+                  <MultiModelVideoPanel generations={multiModelGenerations} />
+                ) : (
+                  <VideoPanel />
+                )}
 
-              {/* Right Sidebar - 360px fixed */}
-              <ChatPanel />
+                {/* Right Sidebar - 360px fixed */}
+                <ChatPanel />
+              </div>
+
+              {/* Movie Timeline at bottom */}
+              {activeMovie && <MovieTimeline />}
             </>
           ) : (
             <div className="flex-1 overflow-hidden">

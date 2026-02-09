@@ -89,6 +89,36 @@ export interface YouTubeChannel {
   connectedAt: Date | null
 }
 
+// Movie types
+export interface MovieClip {
+  id: string
+  movieId: string
+  videoId: string
+  position: number
+  firstFrameUrl: string | null
+  lastFrameUrl: string | null
+  createdAt: Date
+  video?: {
+    id: string
+    videoUrl: string | null
+    thumbnailUrl: string | null
+    duration: number
+    prompt: string
+    model: VideoModel
+  }
+}
+
+export interface Movie {
+  id: string
+  userId: string
+  title: string
+  description: string | null
+  thumbnailUrl: string | null
+  createdAt: Date
+  updatedAt: Date
+  clips: MovieClip[]
+}
+
 interface AppState {
   // User
   user: User | null
@@ -118,6 +148,25 @@ interface AppState {
   generationProgress: number
   setGenerationProgress: (value: number) => void
 
+  // Multi-model generation
+  multiModelMode: boolean
+  setMultiModelMode: (value: boolean) => void
+  selectedModels: VideoModel[]
+  toggleModelSelection: (model: VideoModel) => void
+  clearModelSelection: () => void
+  multiModelGenerations: Array<{
+    model: VideoModel
+    status: 'queued' | 'processing' | 'completed' | 'failed'
+    progress: number
+    video?: Video
+  }>
+  setMultiModelGenerations: (generations: Array<{
+    model: VideoModel
+    status: 'queued' | 'processing' | 'completed' | 'failed'
+    progress: number
+    video?: Video
+  }>) => void
+
   // UI State
   selectedModel: VideoModel
   setSelectedModel: (model: VideoModel) => void
@@ -141,6 +190,18 @@ interface AppState {
   addYouTubeUpload: (upload: YouTubeUpload) => void
   updateYouTubeUpload: (id: string, updates: Partial<YouTubeUpload>) => void
   deleteYouTubeUpload: (id: string) => void
+
+  // Movies
+  movies: Movie[]
+  activeMovieId: string | null
+  setMovies: (movies: Movie[]) => void
+  setActiveMovie: (id: string | null) => void
+  addMovie: (movie: Movie) => void
+  updateMovie: (id: string, updates: Partial<Movie>) => void
+  deleteMovie: (id: string) => void
+  addClipToMovie: (movieId: string, clip: MovieClip) => void
+  removeClipFromMovie: (movieId: string, clipId: string) => void
+  reorderClips: (movieId: string, clipOrders: Array<{ clipId: string; position: number }>) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -221,6 +282,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   generationProgress: 0,
   setGenerationProgress: (value) => set({ generationProgress: value }),
 
+  // Multi-model generation
+  multiModelMode: false,
+  setMultiModelMode: (value) => set({ multiModelMode: value }),
+  selectedModels: [],
+  toggleModelSelection: (model) =>
+    set((state) => ({
+      selectedModels: state.selectedModels.includes(model)
+        ? state.selectedModels.filter((m) => m !== model)
+        : [...state.selectedModels, model],
+    })),
+  clearModelSelection: () => set({ selectedModels: [] }),
+  multiModelGenerations: [],
+  setMultiModelGenerations: (generations) => set({ multiModelGenerations: generations }),
+
   // UI State
   selectedModel: 'veo3_1',
   setSelectedModel: (model) => set({ selectedModel: model }),
@@ -298,6 +373,65 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       youtubeUploads: state.youtubeUploads.filter((u) => u.id !== id),
     })),
+
+  // Movies
+  movies: [],
+  activeMovieId: null,
+  setMovies: (movies) => set({ movies }),
+  setActiveMovie: (id) => set({ activeMovieId: id }),
+  addMovie: (movie) =>
+    set((state) => ({
+      movies: [movie, ...state.movies],
+      activeMovieId: movie.id,
+    })),
+  updateMovie: (id, updates) =>
+    set((state) => ({
+      movies: state.movies.map((m) =>
+        m.id === id ? { ...m, ...updates, updatedAt: new Date() } : m
+      ),
+    })),
+  deleteMovie: (id) =>
+    set((state) => ({
+      movies: state.movies.filter((m) => m.id !== id),
+      activeMovieId: state.activeMovieId === id ? null : state.activeMovieId,
+    })),
+  addClipToMovie: (movieId, clip) =>
+    set((state) => ({
+      movies: state.movies.map((m) =>
+        m.id === movieId
+          ? { ...m, clips: [...m.clips, clip].sort((a, b) => a.position - b.position), updatedAt: new Date() }
+          : m
+      ),
+    })),
+  removeClipFromMovie: (movieId, clipId) =>
+    set((state) => ({
+      movies: state.movies.map((m) =>
+        m.id === movieId
+          ? {
+              ...m,
+              clips: m.clips
+                .filter((c) => c.id !== clipId)
+                .map((c, index) => ({ ...c, position: index })), // Reorder positions
+              updatedAt: new Date()
+            }
+          : m
+      ),
+    })),
+  reorderClips: (movieId, clipOrders) =>
+    set((state) => ({
+      movies: state.movies.map((m) =>
+        m.id === movieId
+          ? {
+              ...m,
+              clips: m.clips.map((clip) => {
+                const newOrder = clipOrders.find((o) => o.clipId === clip.id)
+                return newOrder ? { ...clip, position: newOrder.position } : clip
+              }).sort((a, b) => a.position - b.position),
+              updatedAt: new Date(),
+            }
+          : m
+      ),
+    })),
 }))
 
 // Selectors
@@ -307,6 +441,11 @@ export const useActiveConversation = () => {
   return conversations.find((c) => c.id === activeId) || null
 }
 
+export const useActiveMovie = () => {
+  const movies = useAppStore((state) => state.movies)
+  const activeId = useAppStore((state) => state.activeMovieId)
+  return movies.find((m) => m.id === activeId) || null
+}
 
 // Analytics selectors
 export const useAnalytics = () => {

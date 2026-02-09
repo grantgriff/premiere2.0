@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -39,11 +40,50 @@ export async function GET(request: Request) {
       }
     )
 
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+    const { data: sessionData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
     if (exchangeError) {
       console.error('Code exchange error:', exchangeError)
       return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(exchangeError.message)}`)
+    }
+
+    // Ensure user record exists in public.users table
+    if (sessionData?.user) {
+      try {
+        const adminClient = getSupabaseAdmin()
+        const { data: existingUser } = await adminClient
+          .from('users')
+          .select('id')
+          .eq('id', sessionData.user.id)
+          .single()
+
+        // If user doesn't exist in public.users, create it
+        if (!existingUser) {
+          const { error: insertError } = await adminClient
+            .from('users')
+            .insert({
+              id: sessionData.user.id,
+              email: sessionData.user.email || '',
+              name: sessionData.user.user_metadata?.full_name
+                || sessionData.user.user_metadata?.name
+                || sessionData.user.email?.split('@')[0]
+                || 'User',
+              avatar_url: sessionData.user.user_metadata?.avatar_url
+                || sessionData.user.user_metadata?.picture
+                || null,
+            })
+
+          if (insertError) {
+            console.error('Failed to create user record:', insertError)
+            // Don't block login, trigger will handle it
+          } else {
+            console.log('[Auth] Created user record for:', sessionData.user.email)
+          }
+        }
+      } catch (error) {
+        console.error('[Auth] Error checking/creating user record:', error)
+        // Don't block login
+      }
     }
 
     // Successfully authenticated - redirect to home

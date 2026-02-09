@@ -12,6 +12,9 @@ export interface GenerationParams {
   characterReferenceUrls?: string[] // Character reference image URLs (HTTP)
   characterGcsUris?: string[] // Character reference GCS URIs (for Veo)
   negativePrompt?: string
+  // Frame chaining parameters (for video-to-video continuity)
+  firstFrameGcsUri?: string // First frame GCS URI (for Veo frame chaining)
+  lastFrameGcsUri?: string // Last frame GCS URI (for Veo frame chaining)
 }
 
 export interface GenerationResult {
