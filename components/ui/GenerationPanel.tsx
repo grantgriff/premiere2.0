@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Play, Pause, Download, Loader2, Film, Check, AlertCircle, Plus } from 'lucide-react'
-import { VideoModel, Video } from '@/lib/store'
+import { Play, Pause, Download, Loader2, Film, Check, AlertCircle, Plus, MessageSquare, RefreshCw } from 'lucide-react'
+import { VideoModel, Video, useAppStore } from '@/lib/store'
 import { QualityBadge } from './QualityBadge'
 import { QualityReport } from '@/lib/models/types'
 
@@ -13,6 +13,7 @@ interface GenerationPanelProps {
   video?: Video
   onAddToMovie?: (video: Video) => void
   onDownload?: (video: Video) => void
+  onSetAsCurrentVideo?: (video: Video) => void
 }
 
 const MODEL_NAMES: Record<VideoModel, string> = {
@@ -30,10 +31,13 @@ export function GenerationPanel({
   progress,
   video,
   onAddToMovie,
-  onDownload
+  onDownload,
+  onSetAsCurrentVideo
 }: GenerationPanelProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
+  const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
+  const setMultiModelMode = useAppStore((state) => state.setMultiModelMode)
 
   const togglePlay = () => {
     if (!videoElement) return
@@ -54,6 +58,24 @@ export function GenerationPanel({
   const handleAddToMovie = () => {
     if (video && onAddToMovie) {
       onAddToMovie(video)
+    }
+  }
+
+  const handleFeedback = () => {
+    if (video) {
+      // Set as current video and exit multi-model mode
+      setCurrentVideo(video)
+      setMultiModelMode(false)
+      // User will be able to add feedback in single video view
+    }
+  }
+
+  const handleRegenerate = () => {
+    if (video) {
+      // Set as current video and exit multi-model mode
+      setCurrentVideo(video)
+      setMultiModelMode(false)
+      // User can regenerate from single video view
     }
   }
 
@@ -125,21 +147,39 @@ export function GenerationPanel({
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleAddToMovie}
-                className="btn-primary flex-1 flex items-center justify-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add to Movie
-              </button>
-              <button
-                onClick={handleDownload}
-                className="btn-secondary p-2"
-                title="Download"
-              >
-                <Download className="w-4 h-4" />
-              </button>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleAddToMovie}
+                  className="btn-secondary flex-1 flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add to Movie
+                </button>
+                <button
+                  onClick={handleDownload}
+                  className="btn-secondary p-2"
+                  title="Download"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleFeedback}
+                  className="btn-secondary flex-1 flex items-center justify-center gap-2"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Feedback
+                </button>
+                <button
+                  onClick={handleRegenerate}
+                  className="btn-secondary flex-1 flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Regenerate
+                </button>
+              </div>
             </div>
           </div>
         )}
