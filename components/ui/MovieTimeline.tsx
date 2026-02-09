@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore, useActiveMovie } from '@/lib/store'
-import { Plus, Play, X, Sparkles, Download, Pause, GripVertical } from 'lucide-react'
+import { Plus, Play, X, Sparkles, Download, Pause, GripVertical, Film } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { GenerateNextClipDialog } from './GenerateNextClipDialog'
 import { ExportMovieDialog } from './ExportMovieDialog'
@@ -12,7 +12,6 @@ export function MovieTimeline() {
   const activeMovie = useActiveMovie()
   const removeClipFromMovie = useAppStore((state) => state.removeClipFromMovie)
   const updateMovie = useAppStore((state) => state.updateMovie)
-  const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
   const [showGenerateDialog, setShowGenerateDialog] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [playingClipId, setPlayingClipId] = useState<string | null>(null)
@@ -20,6 +19,12 @@ export function MovieTimeline() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editingTitle, setEditingTitle] = useState('')
+  const [showAddExistingDialog, setShowAddExistingDialog] = useState(false)
+  const [availableVideos, setAvailableVideos] = useState<any[]>([])
+  const [isLoadingVideos, setIsLoadingVideos] = useState(false)
+  const conversations = useAppStore((state) => state.conversations)
+  const addClipToMovie = useAppStore((state) => state.addClipToMovie)
+  const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
 
   const handleRemoveClip = async (clipId: string) => {
     if (!activeMovie || !user?.id) return
@@ -101,11 +106,11 @@ export function MovieTimeline() {
     setPlayingClipId(playingClipId === clipId ? null : clipId)
   }
 
-  const handleClickClip = (clip: NonNullable<typeof activeMovie>['clips'][0]) => {
+  const handleClickClip = (clip: NonNullable<typeof activeMovie>['clips'][0], index: number) => {
     // Set this video as the current video in the main player
     if (clip.video) {
       // Convert partial video data to full Video type
-      setCurrentVideo({
+      const fullVideo = {
         ...clip.video,
         status: 'completed' as const,
         qualityScore: null,
@@ -113,7 +118,11 @@ export function MovieTimeline() {
         isVerifying: false,
         createdAt: new Date(),
         completedAt: new Date(),
-      })
+      }
+      setCurrentVideo(fullVideo)
+
+      // TODO: Implement playlist mode to play clips sequentially from this point
+      // For now, just load the selected clip
     }
   }
 
@@ -149,6 +158,56 @@ export function MovieTimeline() {
     setIsEditingTitle(false)
   }
 
+  // Load available videos when add existing dialog opens
+  useEffect(() => {
+    if (showAddExistingDialog) {
+      const videos = conversations.flatMap((conv) =>
+        conv.videos.filter((v) => v.status === 'completed' && v.videoUrl)
+      )
+      setAvailableVideos(videos)
+    }
+  }, [showAddExistingDialog, conversations])
+
+  const handleAddExistingVideo = async (video: any) => {
+    if (!activeMovie || !user?.id) return
+
+    const newClip = {
+      id: crypto.randomUUID(),
+      movieId: activeMovie.id,
+      videoId: video.id,
+      position: activeMovie.clips.length,
+      firstFrameUrl: null,
+      lastFrameUrl: null,
+      createdAt: new Date(),
+      video: {
+        id: video.id,
+        videoUrl: video.videoUrl,
+        thumbnailUrl: video.thumbnailUrl,
+        duration: video.duration,
+        prompt: video.prompt,
+        model: video.model,
+      },
+    }
+
+    // Add to local store
+    addClipToMovie(activeMovie.id, newClip)
+
+    // Add to API
+    try {
+      await fetch(`/api/movies/${activeMovie.id}/clips`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId: video.id,
+          position: activeMovie.clips.length,
+        }),
+      })
+    } catch (error) {
+      console.error('[MovieTimeline] Failed to add clip:', error)
+    }
+
+    setShowAddExistingDialog(false)
+  }
   if (!activeMovie) {
     return null
   }
@@ -213,7 +272,7 @@ export function MovieTimeline() {
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, index)}
               onDragEnd={handleDragEnd}
-              onClick={() => handleClickClip(clip)}
+              onClick={() => handleClickClip(clip, index)}
               className={`relative group flex-shrink-0 w-40 h-24 rounded-lg overflow-hidden bg-background border-2 transition-all cursor-pointer ${
                 isDragging ? 'opacity-50 scale-95' : ''
               } ${
@@ -320,7 +379,10 @@ export function MovieTimeline() {
         )}
 
         {/* Add existing clip button */}
-        <button className="flex-shrink-0 w-40 h-24 rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-accent/5 flex flex-col items-center justify-center gap-2 text-foreground-secondary hover:text-accent transition-colors">
+        <button
+          onClick={() => setShowAddExistingDialog(true)}
+          className="flex-shrink-0 w-40 h-24 rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-accent/5 flex flex-col items-center justify-center gap-2 text-foreground-secondary hover:text-accent transition-colors"
+        >
           <Plus className="w-6 h-6" />
           <span className="text-xs">Add Existing</span>
         </button>
@@ -342,6 +404,65 @@ export function MovieTimeline() {
         onClose={() => setShowExportDialog(false)}
         movie={activeMovie}
       />
+
+      {/* Add Existing Video Dialog */}
+      {showAddExistingDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-xl shadow-2xl w-full max-w-2xl p-6 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Film className="w-5 h-5" />
+                Add Existing Video
+              </h2>
+              <button
+                onClick={() => setShowAddExistingDialog(false)}
+                className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-foreground-secondary" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3">
+              {availableVideos.length === 0 ? (
+                <div className="text-center py-8 text-foreground-secondary">
+                  No videos available. Generate some videos first!
+                </div>
+              ) : (
+                availableVideos.map((video) => (
+                  <button
+                    key={video.id}
+                    onClick={() => handleAddExistingVideo(video)}
+                    className="w-full flex items-center gap-4 p-4 bg-[#0a0a0a] hover:bg-[#2a2a2a] border border-[#2a2a2a] hover:border-accent rounded-lg transition-all text-left group"
+                  >
+                    {video.thumbnailUrl ? (
+                      <img
+                        src={video.thumbnailUrl}
+                        alt="Video thumbnail"
+                        className="w-32 h-20 object-cover rounded-lg"
+                      />
+                    ) : (
+                      <div className="w-32 h-20 bg-gradient-to-br from-accent/10 to-purple-500/10 rounded-lg flex items-center justify-center">
+                        <Play className="w-8 h-8 text-accent/50" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-foreground font-medium mb-1 line-clamp-2">
+                        {video.prompt}
+                      </p>
+                      <div className="flex items-center gap-3 text-xs text-foreground-secondary">
+                        <span>{video.duration}s</span>
+                        <span>•</span>
+                        <span className="capitalize">{video.model}</span>
+                      </div>
+                    </div>
+                    <Plus className="w-5 h-5 text-accent flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
