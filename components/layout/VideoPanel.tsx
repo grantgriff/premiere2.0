@@ -23,6 +23,7 @@ import { QualityReport } from '@/lib/models/types'
 import { YouTubeUploadPanel } from '@/components/ui/YouTubeUploadPanel'
 import { VideoAnnotationOverlay, VideoComment } from '@/components/ui/VideoAnnotationOverlay'
 import { RegenerateWithFeedbackDialog } from '@/components/ui/RegenerateWithFeedbackDialog'
+import { FeedbackPanel } from '@/components/ui/FeedbackPanel'
 import { startGeneration, pollVideoStatus, VideoStatusResponse, createMessage } from '@/lib/api'
 import { generateId } from '@/lib/utils'
 
@@ -50,6 +51,8 @@ export function VideoPanel() {
   const [showAnnotations, setShowAnnotations] = useState(false)
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false)
   const [showAddToMovieDialog, setShowAddToMovieDialog] = useState(false)
+  const [showFeedbackPanel, setShowFeedbackPanel] = useState(false)
+  const [isRefining, setIsRefining] = useState(false)
   const videoContainerRef = useRef<HTMLDivElement>(null)
 
   // Handle video time updates
@@ -129,17 +132,50 @@ export function VideoPanel() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  // Handle regenerate - open dialog if comments exist
-  const handleRegenerate = () => {
-    if (!currentVideo) return
+  // Handle regenerate - simple version without feedback
+  const handleRegenerate = async () => {
+    if (!currentVideo || !activeConversationId || !user) return
 
-    if (comments.length > 0) {
-      // Open regenerate dialog with feedback
-      setShowRegenerateDialog(true)
-    } else {
-      // Simple regenerate without feedback
-      // TODO: Implement simple regeneration
-      alert(`Regenerate functionality coming soon!\nPrompt: ${currentVideo.prompt}`)
+    // Just regenerate with the same prompt
+    await handleRegenerateWithPrompt(currentVideo.prompt)
+  }
+
+  // Handle click on feedback comment to seek to timestamp
+  const handleCommentClick = (timestamp: number) => {
+    if (!videoRef.current) return
+    videoRef.current.currentTime = timestamp
+    setCurrentTime(timestamp)
+  }
+
+  // Handle regenerate from feedback panel
+  const handleRegenerateFromPanel = async () => {
+    if (!currentVideo || comments.length === 0) return
+
+    setIsRefining(true)
+    try {
+      // Call Gemini to refine prompt
+      const response = await fetch(`/api/videos/${currentVideo.id}/refine-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originalPrompt: currentVideo.prompt,
+          comments: comments.map((c) => ({
+            timestamp: c.timestamp,
+            text: c.text,
+            boundingBox: c.boundingBox,
+          })),
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        // Regenerate with refined prompt (context will be determined in handleRegenerateWithPrompt)
+        await handleRegenerateWithPrompt(data.refinedPrompt)
+      }
+    } catch (error) {
+      console.error('Failed to refine prompt:', error)
+    } finally {
+      setIsRefining(false)
     }
   }
 
@@ -154,16 +190,92 @@ export function VideoPanel() {
     setGenerationProgress(0)
 
     try {
-      // Build style references from reference frame if provided
-      const styleReferences = referenceFrameUrl
-        ? [
-            {
-              type: 'upload' as const,
-              url: referenceFrameUrl,
-              title: 'Reference Frame',
-            },
-          ]
-        : []
+      // Determine context to send based on video position in timeline AND model capabilities
+      let contextType: 'characters' | 'previous_frame' | 'reference_frame' | 'none' = 'none'
+      let characterIds: string[] | undefined
+      let firstFrameUrl: string | undefined
+      const styleReferences: Array<{ type: 'upload'; url: string; title: string }> = []
+
+      // Model capability flags
+      const supportsFirstFrame = currentVideo.model === 'veo3_1' // Only Veo 3.1 supports firstFrameGcsUri
+      const supportsCharacters = true // All models support characters (Veo uses GCS URIs, others use HTTP URLs)
+
+      console.log('[Regenerate] Model capabilities:', {
+        model: currentVideo.model,
+        supportsFirstFrame,
+        supportsCharacters,
+      })
+
+      // Check if this video is part of a movie/timeline
+      const videoInMovie = movies.find(movie =>
+        movie.clips.some(clip => clip.videoId === currentVideo.id)
+      )
+
+      if (videoInMovie) {
+        // Find this video's clip
+        const currentClipIndex = videoInMovie.clips.findIndex(
+          clip => clip.videoId === currentVideo.id
+        )
+
+        if (currentClipIndex > 0) {
+          // This is a continuation video - use previous clip's last frame IF model supports it
+          const previousClip = videoInMovie.clips[currentClipIndex - 1]
+          if (previousClip.lastFrameUrl && supportsFirstFrame) {
+            firstFrameUrl = previousClip.lastFrameUrl
+            contextType = 'previous_frame'
+            console.log('[Regenerate] Using previous clip last frame for timeline continuation (Veo only)')
+          } else if (previousClip.lastFrameUrl && !supportsFirstFrame) {
+            console.log(`[Regenerate] ⚠️ Previous frame available but ${currentVideo.model} doesn't support firstFrame - falling back to characters`)
+            // Fall back to characters if model doesn't support first frame
+            const characters = useAppStore.getState().characters
+            if (characters.length > 0 && characters[0].embeddingStatus === 'ready' && supportsCharacters) {
+              characterIds = characters.map(c => c.id)
+              contextType = 'characters'
+            }
+          } else if (!previousClip.lastFrameUrl) {
+            console.log('[Regenerate] ⚠️ No last frame available from previous clip')
+            // Fall back to characters
+            const characters = useAppStore.getState().characters
+            if (characters.length > 0 && characters[0].embeddingStatus === 'ready' && supportsCharacters) {
+              characterIds = characters.map(c => c.id)
+              contextType = 'characters'
+            }
+          }
+        } else if (currentClipIndex === 0) {
+          // First video in timeline - use characters from conversation
+          const characters = useAppStore.getState().characters
+          if (characters.length > 0 && characters[0].embeddingStatus === 'ready' && supportsCharacters) {
+            characterIds = characters.map(c => c.id)
+            contextType = 'characters'
+            console.log('[Regenerate] Using character references for first video in timeline')
+          }
+        }
+      } else {
+        // Not in a movie - this is a standalone video, use characters from conversation
+        const characters = useAppStore.getState().characters
+        if (characters.length > 0 && characters[0].embeddingStatus === 'ready' && supportsCharacters) {
+          characterIds = characters.map(c => c.id)
+          contextType = 'characters'
+          console.log('[Regenerate] Using character references for standalone video')
+        }
+      }
+
+      // If a reference frame was explicitly provided (from comment), use it as style reference
+      if (referenceFrameUrl && contextType !== 'previous_frame') {
+        styleReferences.push({
+          type: 'upload' as const,
+          url: referenceFrameUrl,
+          title: 'Reference Frame',
+        })
+        contextType = 'reference_frame'
+      }
+
+      console.log('[Regenerate] Final context:', {
+        contextType,
+        characterIds: characterIds?.length || 0,
+        firstFrameUrl: firstFrameUrl ? 'yes' : 'no',
+        styleReferences: styleReferences.length,
+      })
 
       // Add assistant message about regeneration
       const regeneratingMessage = {
@@ -175,13 +287,15 @@ export function VideoPanel() {
       addMessage(activeConversationId, regeneratingMessage)
       createMessage(activeConversationId, 'assistant', regeneratingMessage.content)
 
-      // Start generation with refined prompt
+      // Start generation with refined prompt and appropriate context
       const response = await startGeneration({
         prompt: refinedPrompt,
         model: currentVideo.model,
         duration: currentVideo.duration,
         conversationId: activeConversationId,
-        styleReferences,
+        characterIds,
+        firstFrameUrl,
+        styleReferences: styleReferences.length > 0 ? styleReferences : undefined,
       })
 
       if (!response.success || !response.videoId) {
@@ -319,6 +433,10 @@ export function VideoPanel() {
       if (response.ok) {
         const data = await response.json()
         setComments((prev) => [...prev, data.comment])
+        // Show feedback panel when first comment is added
+        if (comments.length === 0) {
+          setShowFeedbackPanel(true)
+        }
       }
     } catch (error) {
       console.error('Failed to add comment:', error)
@@ -363,14 +481,21 @@ export function VideoPanel() {
 
   // Handle add to movie
   const handleAddToMovie = async (movieId: string) => {
-    if (!currentVideo || !user) return
+    if (!currentVideo || !user) {
+      console.error('[VideoPanel] Missing required data:', { currentVideo: !!currentVideo, user: !!user })
+      return
+    }
 
     try {
       // Get the movie to find the next position
       const movie = movies.find(m => m.id === movieId)
-      if (!movie) return
+      if (!movie) {
+        console.error('[VideoPanel] Movie not found:', movieId)
+        return
+      }
 
       const nextPosition = movie.clips?.length || 0
+      console.log('[VideoPanel] Adding video to movie:', { movieId, videoId: currentVideo.id, position: nextPosition })
 
       // Add clip to movie
       const response = await fetch(`/api/movies/${movieId}/clips`, {
@@ -382,25 +507,40 @@ export function VideoPanel() {
         }),
       })
 
-      if (response.ok) {
-        // Reload movies to get updated data
-        const moviesResponse = await fetch(`/api/movies?userId=${user.id}`)
-        if (moviesResponse.ok) {
-          const data = await moviesResponse.json()
-          useAppStore.getState().setMovies(data.movies)
-        }
-
-        setShowAddToMovieDialog(false)
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.error('[VideoPanel] Failed to add clip:', errorData)
+        alert(`Failed to add clip to movie: ${errorData.error}`)
+        return
       }
+
+      console.log('[VideoPanel] Clip added successfully')
+
+      // Reload movies to get updated data
+      const moviesResponse = await fetch(`/api/movies?userId=${user.id}`)
+      if (moviesResponse.ok) {
+        const data = await moviesResponse.json()
+        useAppStore.getState().setMovies(data.movies)
+        console.log('[VideoPanel] Movies reloaded, setting active movie to:', movieId)
+
+        // Set this movie as active so timeline shows
+        useAppStore.getState().setActiveMovie(movieId)
+      }
+
+      setShowAddToMovieDialog(false)
+      alert('Clip added to movie successfully!')
     } catch (error) {
-      console.error('Failed to add to movie:', error)
+      console.error('[VideoPanel] Exception adding to movie:', error)
+      alert(`Error adding clip to movie: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
   return (
-    <main className="flex-1 min-w-[600px] flex flex-col bg-background border-r border-border">
-      {/* Video Viewport */}
-      <div className="flex-1 flex items-center justify-center p-8">
+    <>
+      <main className="flex-1 min-w-[600px] flex bg-background border-r border-border">
+        {/* Video Viewport */}
+        <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex items-center justify-center p-8">
         {isGenerating ? (
           /* Generating State */
           <div className="text-center max-w-md">
@@ -564,11 +704,15 @@ export function VideoPanel() {
                   )}
                 </button>
                 <button
-                  onClick={() => setShowAnnotations(!showAnnotations)}
+                  onClick={() => {
+                    const newState = !showAnnotations
+                    setShowAnnotations(newState)
+                    setShowFeedbackPanel(newState)
+                  }}
                   className={`btn-secondary flex items-center gap-2 ${showAnnotations ? 'bg-accent/20 border-accent' : ''}`}
                 >
                   <MessageSquare className="w-4 h-4" />
-                  {showAnnotations ? 'Close Annotations' : 'Annotate'}
+                  {showAnnotations ? 'Close Feedback' : 'Feedback'}
                   {comments.length > 0 && (
                     <span className="ml-1 text-xs bg-accent text-white px-1.5 py-0.5 rounded-full">
                       {comments.length}
@@ -627,7 +771,20 @@ export function VideoPanel() {
             </div>
           </div>
         )}
-      </div>
+          </div>
+        </div>
+
+        {/* Feedback Panel - Shows when feedback mode is active */}
+        {showFeedbackPanel && currentVideo && (
+          <FeedbackPanel
+            comments={comments}
+            onCommentClick={handleCommentClick}
+            onDeleteComment={handleDeleteComment}
+            onRegenerateWithFeedback={handleRegenerateFromPanel}
+            isRefining={isRefining}
+          />
+        )}
+      </main>
 
       {/* YouTube Upload Panel */}
       <YouTubeUploadPanel
@@ -685,6 +842,6 @@ export function VideoPanel() {
           </div>
         </div>
       )}
-    </main>
+    </>
   )
 }
