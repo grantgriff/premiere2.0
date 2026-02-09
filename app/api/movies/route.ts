@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
         user_id: userId,
         title,
         description: description || null,
+        updated_at: new Date().toISOString(),
       })
       .select()
       .single()
