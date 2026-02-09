@@ -557,8 +557,8 @@ export function VideoPanel() {
         clips: []
       })
 
-      // Small delay to ensure database has committed the transaction
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Longer delay to ensure database has committed the transaction and replicated
+      await new Promise(resolve => setTimeout(resolve, 500))
 
       // Add clip to the new movie
       await handleAddToMovie(newMovie.id)
@@ -654,8 +654,8 @@ export function VideoPanel() {
       // Add clip to movie with retry logic for newly created movies
       let response: Response | null = null
       let retries = 0
-      const maxRetries = 3
-      const retryDelays = [200, 500, 1000] // Exponential backoff
+      const maxRetries = 5
+      const retryDelays = [500, 1000, 2000, 3000, 5000] // Longer delays for database replication
 
       while (retries <= maxRetries) {
         response = await fetch(`/api/movies/${movieId}/clips`, {

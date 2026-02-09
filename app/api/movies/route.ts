@@ -89,7 +89,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    console.log('[Movies API] Created movie:', movie.id)
+    console.log('[Movies API] Successfully created movie:', movie.id, 'Title:', movie.title)
+    console.log('[Movies API] Movie data:', JSON.stringify(movie))
     return NextResponse.json({ movie })
   } catch (error) {
     console.error('[Movies API] Exception:', error)
