@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUserServer } from '@/lib/auth-server'
 
 /**
  * POST /api/videos/[id]/refine-prompt - Refine prompt using Gemini based on comments
@@ -10,7 +10,7 @@ export async function POST(
 ) {
   try {
     const videoId = (await params).id
-    const user = await getCurrentUser()
+    const user = await getCurrentUserServer()
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
