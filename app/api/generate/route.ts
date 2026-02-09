@@ -576,8 +576,29 @@ export async function GET(request: NextRequest) {
         console.log(`[Status] Polling model API for job: ${activeJob.externalJobId}`)
         const modelStatus = await checkModelStatus(activeJob.model, activeJob.externalJobId)
 
+        // Check for completed status without video URL (API bug)
+        if (modelStatus.status === 'completed' && !modelStatus.videoUrl) {
+          console.error(`[Status] Model API returned completed but no video URL for ${activeJob.model}:`, modelStatus)
+          activeJob.status = 'failed'
+          activeJob.error = `${activeJob.model} completed but did not provide video URL`
+          activeJobs.set(videoId, activeJob)
+
+          await Promise.all([
+            prisma.video.update({
+              where: { id: videoId },
+              data: { status: 'failed' },
+            }),
+            prisma.generationJob.update({
+              where: { videoId },
+              data: {
+                status: 'failed',
+                lastError: activeJob.error,
+              },
+            }),
+          ])
+        }
         // Update cache and database
-        if (modelStatus.status === 'completed' && modelStatus.videoUrl) {
+        else if (modelStatus.status === 'completed' && modelStatus.videoUrl) {
           activeJob.status = 'completed'
           activeJob.videoUrl = modelStatus.videoUrl
           activeJob.thumbnailUrl = modelStatus.thumbnailUrl

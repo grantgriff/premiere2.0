@@ -44,6 +44,9 @@ export function VideoPanel() {
   const movies = useAppStore((state) => state.movies)
   const multiModelGenerations = useAppStore((state) => state.multiModelGenerations)
   const setMultiModelMode = useAppStore((state) => state.setMultiModelMode)
+  const activeMovieId = useAppStore((state) => state.activeMovieId)
+  const setActiveMovie = useAppStore((state) => state.setActiveMovie)
+  const updateMovie = useAppStore((state) => state.updateMovie)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -59,6 +62,7 @@ export function VideoPanel() {
   const [isRefining, setIsRefining] = useState(false)
   const [newMovieTitle, setNewMovieTitle] = useState('')
   const [isCreatingMovie, setIsCreatingMovie] = useState(false)
+  const [editingMovieTitle, setEditingMovieTitle] = useState('')
   const videoContainerRef = useRef<HTMLDivElement>(null)
 
   // Load existing comments when video changes
@@ -67,13 +71,17 @@ export function VideoPanel() {
 
     const loadComments = async () => {
       try {
+        console.log('[VideoPanel] Loading comments for video:', currentVideo.id)
         const response = await fetch(`/api/videos/${currentVideo.id}/comments`)
         if (response.ok) {
           const data = await response.json()
+          console.log('[VideoPanel] Loaded comments:', data.comments)
           setComments(data.comments || [])
+        } else {
+          console.error('[VideoPanel] Failed to load comments:', response.status)
         }
       } catch (error) {
-        console.error('Failed to load comments:', error)
+        console.error('[VideoPanel] Exception loading comments:', error)
       }
     }
 
@@ -449,6 +457,7 @@ export function VideoPanel() {
     if (!currentVideo) return
 
     try {
+      console.log('[VideoPanel] Adding comment:', comment)
       const response = await fetch(`/api/videos/${currentVideo.id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -457,14 +466,21 @@ export function VideoPanel() {
 
       if (response.ok) {
         const data = await response.json()
-        setComments((prev) => [...prev, data.comment])
+        console.log('[VideoPanel] Comment added successfully:', data.comment)
+        setComments((prev) => {
+          const updated = [...prev, data.comment]
+          console.log('[VideoPanel] Updated comments state:', updated)
+          return updated
+        })
         // Show feedback panel when first comment is added
         if (comments.length === 0) {
           setShowFeedbackPanel(true)
         }
+      } else {
+        console.error('[VideoPanel] Failed to add comment:', response.status)
       }
     } catch (error) {
-      console.error('Failed to add comment:', error)
+      console.error('[VideoPanel] Exception adding comment:', error)
     }
   }
 
@@ -532,6 +548,18 @@ export function VideoPanel() {
       const { movie: newMovie } = await createResponse.json()
       console.log('[VideoPanel] Created new movie:', newMovie.id)
 
+      // Add the movie to local state first
+      const addMovie = useAppStore.getState().addMovie
+      addMovie({
+        ...newMovie,
+        createdAt: new Date(newMovie.createdAt),
+        updatedAt: new Date(newMovie.updatedAt),
+        clips: []
+      })
+
+      // Small delay to ensure database has committed the transaction
+      await new Promise(resolve => setTimeout(resolve, 100))
+
       // Add clip to the new movie
       await handleAddToMovie(newMovie.id)
       setNewMovieTitle('')
@@ -540,6 +568,39 @@ export function VideoPanel() {
       alert(`Error creating movie: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsCreatingMovie(false)
+    }
+  }
+
+  // Get active movie
+  const activeMovie = movies.find(m => m.id === activeMovieId)
+
+  // Initialize editing title when dialog opens
+  useEffect(() => {
+    if (showAddToMovieDialog && activeMovie) {
+      setEditingMovieTitle(activeMovie.title)
+    }
+  }, [showAddToMovieDialog, activeMovie])
+
+  // Handle updating movie title
+  const handleUpdateMovieTitle = async () => {
+    if (!activeMovie || !user || !editingMovieTitle.trim()) return
+
+    try {
+      const response = await fetch('/api/movies', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: activeMovie.id,
+          userId: user.id,
+          title: editingMovieTitle.trim(),
+        }),
+      })
+
+      if (response.ok) {
+        updateMovie(activeMovie.id, { title: editingMovieTitle.trim() })
+      }
+    } catch (error) {
+      console.error('[VideoPanel] Failed to update movie title:', error)
     }
   }
 
@@ -590,20 +651,44 @@ export function VideoPanel() {
         // Continue without frames - not critical
       }
 
-      // Add clip to movie
-      const response = await fetch(`/api/movies/${movieId}/clips`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          videoId: currentVideo.id,
-          position: nextPosition,
-          firstFrameUrl,
-          lastFrameUrl,
-        }),
-      })
+      // Add clip to movie with retry logic for newly created movies
+      let response: Response | null = null
+      let retries = 0
+      const maxRetries = 3
+      const retryDelays = [200, 500, 1000] // Exponential backoff
 
-      if (!response.ok) {
+      while (retries <= maxRetries) {
+        response = await fetch(`/api/movies/${movieId}/clips`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            videoId: currentVideo.id,
+            position: nextPosition,
+            firstFrameUrl,
+            lastFrameUrl,
+          }),
+        })
+
+        if (response.ok) {
+          break // Success!
+        }
+
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+
+        // Check if it's a "movie not found" error (foreign key constraint)
+        if (errorData.error?.includes('movie_clips_movie_id_fkey') ||
+            errorData.error?.includes('Movie not found')) {
+
+          if (retries < maxRetries) {
+            const delay = retryDelays[retries]
+            console.log(`[VideoPanel] Movie not found in DB yet, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries})...`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+            retries++
+            continue
+          }
+        }
+
+        // Non-retryable error or max retries exceeded
         console.error('[VideoPanel] Failed to add clip:', errorData)
         alert(`Failed to add clip to movie: ${errorData.error}`)
         return
@@ -611,19 +696,27 @@ export function VideoPanel() {
 
       console.log('[VideoPanel] Clip added successfully')
 
-      // Reload movies to get updated data
+      // Reload movies to get updated data with the new clip
       const moviesResponse = await fetch(`/api/movies?userId=${user.id}`)
       if (moviesResponse.ok) {
         const data = await moviesResponse.json()
-        useAppStore.getState().setMovies(data.movies)
+        const reloadedMovies = data.movies.map((m: any) => ({
+          ...m,
+          createdAt: new Date(m.createdAt),
+          updatedAt: new Date(m.updatedAt),
+          clips: (m.clips || []).map((c: any) => ({
+            ...c,
+            createdAt: new Date(c.createdAt),
+          }))
+        }))
+        useAppStore.getState().setMovies(reloadedMovies)
         console.log('[VideoPanel] Movies reloaded, setting active movie to:', movieId)
 
         // Set this movie as active so timeline shows
-        useAppStore.getState().setActiveMovie(movieId)
+        setActiveMovie(movieId)
       }
 
       setShowAddToMovieDialog(false)
-      alert('Clip added to movie successfully!')
     } catch (error) {
       console.error('[VideoPanel] Exception adding to movie:', error)
       alert(`Error adding clip to movie: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -916,7 +1009,7 @@ export function VideoPanel() {
       {showAddToMovieDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
           <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                 <Film className="w-5 h-5" />
                 Add to Movie
@@ -929,9 +1022,42 @@ export function VideoPanel() {
               </button>
             </div>
 
+            {/* Active Movie - Quick Add */}
+            {activeMovie && (
+              <div className="mb-6 p-4 bg-accent/10 border border-accent/30 rounded-lg">
+                <p className="text-xs text-foreground-secondary mb-3">Current Movie</p>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="text"
+                    value={editingMovieTitle}
+                    onChange={(e) => setEditingMovieTitle(e.target.value)}
+                    onBlur={handleUpdateMovieTitle}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleUpdateMovieTitle()
+                        e.currentTarget.blur()
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 bg-[#0a0a0a] border border-[#3a3a3a] rounded-lg text-sm text-foreground focus:outline-none focus:border-accent"
+                  />
+                </div>
+                <div className="text-xs text-foreground-secondary mb-3">
+                  {activeMovie.clips?.length || 0} clip{(activeMovie.clips?.length || 0) !== 1 ? 's' : ''}
+                </div>
+                <button
+                  onClick={() => handleAddToMovie(activeMovie.id)}
+                  className="w-full px-4 py-2.5 bg-accent hover:bg-accent/90 text-white font-medium text-sm rounded-lg transition-colors"
+                >
+                  Add to "{editingMovieTitle}"
+                </button>
+              </div>
+            )}
+
             {/* Create New Movie Section */}
             <div className="mb-6">
-              <p className="text-sm font-medium text-foreground mb-2">Create New Movie</p>
+              <p className="text-sm font-medium text-foreground mb-2">
+                {activeMovie ? 'Or Create New Movie' : 'Create New Movie'}
+              </p>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -951,12 +1077,12 @@ export function VideoPanel() {
               </div>
             </div>
 
-            {/* Existing Movies Section */}
-            {movies.length > 0 && (
+            {/* Other Movies Section */}
+            {movies.filter(m => m.id !== activeMovieId).length > 0 && (
               <>
-                <p className="text-sm font-medium text-foreground mb-2">Or Add to Existing</p>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {movies.map((movie) => (
+                <p className="text-sm font-medium text-foreground mb-2">Or Add to Different Movie</p>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {movies.filter(m => m.id !== activeMovieId).map((movie) => (
                     <button
                       key={movie.id}
                       onClick={() => handleAddToMovie(movie.id)}
@@ -964,7 +1090,7 @@ export function VideoPanel() {
                     >
                       <div className="font-medium text-foreground">{movie.title}</div>
                       <div className="text-xs text-foreground-secondary mt-1">
-                        {movie.clips?.length || 0} clips
+                        {movie.clips?.length || 0} clip{(movie.clips?.length || 0) !== 1 ? 's' : ''}
                       </div>
                     </button>
                   ))}

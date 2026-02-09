@@ -154,13 +154,22 @@ export async function checkLumaStatus(jobId: string): Promise<GenerationStatus> 
     }
 
     const data: LumaGenerateResponse = await response.json()
-    console.log('[Luma] Status:', data.state, data.id)
+    console.log('[Luma] Status check response:', JSON.stringify(data))
+    console.log('[Luma] State:', data.state, 'Job ID:', data.id)
 
     switch (data.state) {
       case 'completed':
+        if (!data.assets?.video) {
+          console.error('[Luma] Completed but no video URL in response:', JSON.stringify(data))
+          return {
+            status: 'failed',
+            error: 'Completed but no video URL provided'
+          }
+        }
+        console.log('[Luma] ✓ Generation completed successfully. Video URL:', data.assets.video)
         return {
           status: 'completed',
-          videoUrl: data.assets?.video || undefined,
+          videoUrl: data.assets.video,
           thumbnailUrl: undefined,
         }
       case 'failed':
@@ -174,9 +183,13 @@ export async function checkLumaStatus(jobId: string): Promise<GenerationStatus> 
           error: data.failure_reason || 'Generation failed'
         }
       case 'dreaming':
+        console.log('[Luma] Still processing (dreaming)...')
         return { status: 'processing' }
       case 'queued':
+        console.log('[Luma] Still queued...')
+        return { status: 'pending' }
       default:
+        console.warn('[Luma] Unknown state:', data.state)
         return { status: 'pending' }
     }
   } catch (error) {

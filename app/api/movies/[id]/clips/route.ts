@@ -20,6 +20,21 @@ export async function POST(
 
     const supabase = getSupabaseAdmin()
 
+    // Verify movie exists first
+    const { data: movie, error: movieError } = await supabase
+      .from('movies')
+      .select('id')
+      .eq('id', movieId)
+      .single()
+
+    if (movieError || !movie) {
+      console.error('[Movie Clips API] Movie not found:', movieId, movieError)
+      return NextResponse.json(
+        { error: `Movie not found: ${movieId}` },
+        { status: 404 }
+      )
+    }
+
     // Insert the clip
     const { data: clip, error } = await supabase
       .from('movie_clips')
