@@ -28,6 +28,7 @@ interface VideoAnnotationOverlayProps {
   currentTime: number
   isPlaying: boolean
   onPause: () => void
+  isActive?: boolean // Whether annotation mode is active (allows creating new comments)
 }
 
 export function VideoAnnotationOverlay({
@@ -39,6 +40,7 @@ export function VideoAnnotationOverlay({
   currentTime,
   isPlaying,
   onPause,
+  isActive = true,
 }: VideoAnnotationOverlayProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [commentText, setCommentText] = useState('')
@@ -176,11 +178,11 @@ export function VideoAnnotationOverlay({
   return (
     <div
       ref={overlayRef}
-      className="absolute inset-0 z-50 cursor-crosshair overflow-visible"
-      onMouseDown={!isCreating ? handleMouseDown : undefined}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      style={{ pointerEvents: 'auto' }}
+      className={`absolute inset-0 z-50 overflow-visible ${isActive ? 'cursor-crosshair' : ''}`}
+      onMouseDown={isActive && !isCreating ? handleMouseDown : undefined}
+      onMouseMove={isActive ? handleMouseMove : undefined}
+      onMouseUp={isActive ? handleMouseUp : undefined}
+      style={{ pointerEvents: isActive ? 'auto' : 'none' }}
     >
       {/* Existing Comments */}
       {comments.map((comment) => {
@@ -303,7 +305,7 @@ export function VideoAnnotationOverlay({
       )}
 
       {/* Instructions */}
-      {!isCreating && comments.length === 0 && (
+      {isActive && !isCreating && comments.length === 0 && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/80 text-white text-sm px-4 py-2 rounded-lg">
           Click to add comment • Drag to highlight area
         </div>
