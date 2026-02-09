@@ -772,75 +772,76 @@ export function VideoPanel() {
           </div>
         )}
           </div>
+        </div>
 
-          {/* Feedback Panel - Shows when feedback mode is active */}
-          {showFeedbackPanel && currentVideo && (
-            <FeedbackPanel
-              comments={comments}
-              onCommentClick={handleCommentClick}
-              onDeleteComment={handleDeleteComment}
-              onRegenerateWithFeedback={handleRegenerateFromPanel}
-              isRefining={isRefining}
-            />
-          )}
-        </main>
-
-        {/* YouTube Upload Panel */}
-        <YouTubeUploadPanel
-          isOpen={showYouTubeUpload}
-          onClose={() => setShowYouTubeUpload(false)}
-          video={currentVideo}
-        />
-
-        {/* Regenerate with Feedback Dialog */}
-        {currentVideo && (
-          <RegenerateWithFeedbackDialog
-            isOpen={showRegenerateDialog}
-            onClose={() => setShowRegenerateDialog(false)}
-            video={currentVideo}
+        {/* Feedback Panel - Shows when feedback mode is active */}
+        {showFeedbackPanel && currentVideo && (
+          <FeedbackPanel
             comments={comments}
-            onRegenerate={handleRegenerateWithPrompt}
+            onCommentClick={handleCommentClick}
+            onDeleteComment={handleDeleteComment}
+            onRegenerateWithFeedback={handleRegenerateFromPanel}
+            isRefining={isRefining}
           />
         )}
+      </main>
 
-        {/* Add to Movie Dialog */}
-        {showAddToMovieDialog && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-            <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-xl shadow-2xl w-full max-w-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                  <Film className="w-5 h-5" />
-                  Add to Movie
-                </h2>
+      {/* YouTube Upload Panel */}
+      <YouTubeUploadPanel
+        isOpen={showYouTubeUpload}
+        onClose={() => setShowYouTubeUpload(false)}
+        video={currentVideo}
+      />
+
+      {/* Regenerate with Feedback Dialog */}
+      {currentVideo && (
+        <RegenerateWithFeedbackDialog
+          isOpen={showRegenerateDialog}
+          onClose={() => setShowRegenerateDialog(false)}
+          video={currentVideo}
+          comments={comments}
+          onRegenerate={handleRegenerateWithPrompt}
+        />
+      )}
+
+      {/* Add to Movie Dialog */}
+      {showAddToMovieDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Film className="w-5 h-5" />
+                Add to Movie
+              </h2>
+              <button
+                onClick={() => setShowAddToMovieDialog(false)}
+                className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-foreground-secondary" />
+              </button>
+            </div>
+
+            <p className="text-sm text-foreground-secondary mb-4">
+              Select a movie to add this clip to:
+            </p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {movies.map((movie) => (
                 <button
-                  onClick={() => setShowAddToMovieDialog(false)}
-                  className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors"
+                  key={movie.id}
+                  onClick={() => handleAddToMovie(movie.id)}
+                  className="w-full p-3 text-left border border-[#3a3a3a] hover:bg-[#2a2a2a] rounded-lg transition-colors"
                 >
-                  <X className="w-5 h-5 text-foreground-secondary" />
+                  <div className="font-medium text-foreground">{movie.title}</div>
+                  <div className="text-xs text-foreground-secondary mt-1">
+                    {movie.clips?.length || 0} clips
+                  </div>
                 </button>
-              </div>
-
-              <p className="text-sm text-foreground-secondary mb-4">
-                Select a movie to add this clip to:
-              </p>
-
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {movies.map((movie) => (
-                  <button
-                    key={movie.id}
-                    onClick={() => handleAddToMovie(movie.id)}
-                    className="w-full p-3 text-left border border-[#3a3a3a] hover:bg-[#2a2a2a] rounded-lg transition-colors"
-                  >
-                    <div className="font-medium text-foreground">{movie.title}</div>
-                    <div className="text-xs text-foreground-secondary mt-1">
-                      {movie.clips?.length || 0} clips
-                    </div>
-                  </button>
-                ))}
-              </div>
+              ))}
             </div>
           </div>
-        )}
-      </>
-    )
-  }
+        </div>
+      )}
+    </>
+  )
+}
