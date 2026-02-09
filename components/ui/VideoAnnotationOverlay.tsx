@@ -239,6 +239,7 @@ export function VideoAnnotationOverlay({
                 <X className="w-3 h-3" />
               </button>
             </div>
+            </div>
           </div>
         )
       })}
