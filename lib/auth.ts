@@ -77,7 +77,7 @@ export async function getSession(): Promise<Session | null> {
   return session
 }
 
-// Get current user
+// Get current user (browser/client-side only)
 export async function getCurrentUser(): Promise<AuthUser | null> {
   const supabase = createBrowserClient()
   const { data: { user }, error } = await supabase.auth.getUser()

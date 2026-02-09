@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUserServer } from '@/lib/auth-server'
 
 /**
  * GET /api/videos/[id]/comments - Get all comments for a video
@@ -11,7 +11,7 @@ export async function GET(
 ) {
   try {
     const videoId = (await params).id
-    const user = await getCurrentUser()
+    const user = await getCurrentUserServer()
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -65,7 +65,7 @@ export async function POST(
 ) {
   try {
     const videoId = (await params).id
-    const user = await getCurrentUser()
+    const user = await getCurrentUserServer()
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

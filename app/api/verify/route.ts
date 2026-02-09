@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       where: { id: videoId },
       data: {
         qualityScore: report.overallScore,
-        qualityReport: report as object,
+        qualityReport: JSON.stringify(report),
       },
     })
 
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Video not found' }, { status: 404 })
     }
 
-    const videoData = video as { qualityScore: number | null; qualityReport: unknown }
+    const videoData = video as { qualityScore: number | null; qualityReport: string | null }
     if (!videoData.qualityReport) {
       return NextResponse.json(
         { error: 'Quality report not yet available' },
@@ -79,9 +79,21 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Parse the JSON string back into an object
+    let report
+    try {
+      report = JSON.parse(videoData.qualityReport)
+    } catch (error) {
+      console.error('Failed to parse quality report:', error)
+      return NextResponse.json(
+        { error: 'Invalid quality report format' },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json({
       qualityScore: videoData.qualityScore,
-      report: videoData.qualityReport,
+      report,
     })
   } catch (error) {
     console.error('Get quality report error:', error)

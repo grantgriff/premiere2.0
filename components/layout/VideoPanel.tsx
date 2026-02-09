@@ -47,6 +47,7 @@ export function VideoPanel() {
   const activeMovieId = useAppStore((state) => state.activeMovieId)
   const setActiveMovie = useAppStore((state) => state.setActiveMovie)
   const updateMovie = useAppStore((state) => state.updateMovie)
+  const setMovies = useAppStore((state) => state.setMovies)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -472,10 +473,9 @@ export function VideoPanel() {
           console.log('[VideoPanel] Updated comments state:', updated)
           return updated
         })
-        // Show feedback panel when first comment is added
-        if (comments.length === 0) {
-          setShowFeedbackPanel(true)
-        }
+        // Show feedback panel when comment is added
+        setShowFeedbackPanel(true)
+        setShowAnnotations(true)
       } else {
         console.error('[VideoPanel] Failed to add comment:', response.status)
       }
@@ -546,7 +546,9 @@ export function VideoPanel() {
       }
 
       const { movie: newMovie } = await createResponse.json()
-      console.log('[VideoPanel] Created new movie:', newMovie.id)
+      console.log('[VideoPanel] Created new movie - Full response:', JSON.stringify(newMovie))
+      console.log('[VideoPanel] Movie ID from API:', newMovie.id)
+      console.log('[VideoPanel] Movie title:', newMovie.title)
 
       // Add the movie to local state first
       const addMovie = useAppStore.getState().addMovie
@@ -556,11 +558,13 @@ export function VideoPanel() {
         updatedAt: new Date(newMovie.updatedAt),
         clips: []
       })
+      console.log('[VideoPanel] Added movie to local state with ID:', newMovie.id)
 
-      // Small delay to ensure database has committed the transaction
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Longer delay to ensure database has committed the transaction and replicated
+      await new Promise(resolve => setTimeout(resolve, 500))
 
       // Add clip to the new movie
+      console.log('[VideoPanel] About to call handleAddToMovie with ID:', newMovie.id)
       await handleAddToMovie(newMovie.id)
       setNewMovieTitle('')
     } catch (error) {
@@ -574,12 +578,47 @@ export function VideoPanel() {
   // Get active movie
   const activeMovie = movies.find(m => m.id === activeMovieId)
 
-  // Initialize editing title when dialog opens
+  // Reload movies and initialize editing title when dialog opens
   useEffect(() => {
-    if (showAddToMovieDialog && activeMovie) {
-      setEditingMovieTitle(activeMovie.title)
+    if (showAddToMovieDialog) {
+      // Reload movies to ensure we have fresh data
+      loadMoviesFromAPI()
+
+      if (activeMovie) {
+        setEditingMovieTitle(activeMovie.title)
+      }
     }
-  }, [showAddToMovieDialog, activeMovie])
+  }, [showAddToMovieDialog])
+
+  // Load movies from API
+  const loadMoviesFromAPI = async () => {
+    if (!user) return
+
+    try {
+      console.log('[VideoPanel] Reloading movies from API')
+      const response = await fetch(`/api/movies?userId=${user.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        const moviesData = data.movies.map((m: any) => ({
+          ...m,
+          createdAt: new Date(m.createdAt),
+          updatedAt: new Date(m.updatedAt),
+          clips: (m.clips || []).map((c: any) => ({
+            ...c,
+            createdAt: new Date(c.createdAt),
+          }))
+        }))
+        setMovies(moviesData)
+        console.log('[VideoPanel] Loaded', moviesData.length, 'movies:', moviesData.map((m: any) => ({ id: m.id, title: m.title })))
+      } else {
+        console.error('[VideoPanel] Failed to load movies:', response.status)
+        const errorData = await response.json().catch(() => ({}))
+        console.error('[VideoPanel] Error details:', errorData)
+      }
+    } catch (error) {
+      console.error('[VideoPanel] Exception loading movies:', error)
+    }
+  }
 
   // Handle updating movie title
   const handleUpdateMovieTitle = async () => {
@@ -606,6 +645,7 @@ export function VideoPanel() {
 
   // Handle add to movie
   const handleAddToMovie = async (movieId: string) => {
+    console.log('[VideoPanel] handleAddToMovie called with movieId:', movieId)
     if (!currentVideo || !user) {
       console.error('[VideoPanel] Missing required data:', { currentVideo: !!currentVideo, user: !!user })
       return
@@ -621,9 +661,12 @@ export function VideoPanel() {
       // Get the movie to find the next position
       const movie = movies.find(m => m.id === movieId)
       if (!movie) {
-        console.error('[VideoPanel] Movie not found:', movieId)
+        console.error('[VideoPanel] Movie not found in local state:', movieId)
+        console.error('[VideoPanel] Available movies:', movies.map(m => ({ id: m.id, title: m.title })))
+        alert(`Movie not found. This may be due to stale data. Please refresh the page and try again.`)
         return
       }
+      console.log('[VideoPanel] Movie found:', movie.title, 'ID:', movie.id)
 
       const nextPosition = movie.clips?.length || 0
       console.log('[VideoPanel] Adding video to movie:', { movieId, videoId: currentVideo.id, position: nextPosition })
@@ -654,10 +697,11 @@ export function VideoPanel() {
       // Add clip to movie with retry logic for newly created movies
       let response: Response | null = null
       let retries = 0
-      const maxRetries = 3
-      const retryDelays = [200, 500, 1000] // Exponential backoff
+      const maxRetries = 5
+      const retryDelays = [500, 1000, 2000, 3000, 5000] // Longer delays for database replication
 
       while (retries <= maxRetries) {
+        console.log(`[VideoPanel] Attempting to add clip (attempt ${retries + 1}/${maxRetries + 1})...`)
         response = await fetch(`/api/movies/${movieId}/clips`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -669,27 +713,35 @@ export function VideoPanel() {
           }),
         })
 
+        console.log(`[VideoPanel] Response status: ${response.status}`)
+
         if (response.ok) {
+          console.log('[VideoPanel] Clip added successfully on attempt', retries + 1)
           break // Success!
         }
 
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.log('[VideoPanel] Error response:', errorData)
 
         // Check if it's a "movie not found" error (foreign key constraint)
         if (errorData.error?.includes('movie_clips_movie_id_fkey') ||
-            errorData.error?.includes('Movie not found')) {
+            errorData.error?.includes('Movie not found') ||
+            errorData.error?.includes('Database error')) {
 
           if (retries < maxRetries) {
             const delay = retryDelays[retries]
-            console.log(`[VideoPanel] Movie not found in DB yet, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries})...`)
+            console.log(`[VideoPanel] Retryable error detected, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries})...`)
+            console.log('[VideoPanel] Error was:', errorData.error)
             await new Promise(resolve => setTimeout(resolve, delay))
             retries++
             continue
+          } else {
+            console.error('[VideoPanel] Max retries exceeded, giving up')
           }
         }
 
         // Non-retryable error or max retries exceeded
-        console.error('[VideoPanel] Failed to add clip:', errorData)
+        console.error('[VideoPanel] Failed to add clip after', retries + 1, 'attempts:', errorData)
         alert(`Failed to add clip to movie: ${errorData.error}`)
         return
       }
@@ -791,19 +843,18 @@ export function VideoPanel() {
                 ) : null}
               </div>
 
-              {/* Annotation Overlay */}
-              {showAnnotations && (
-                <VideoAnnotationOverlay
-                  videoId={currentVideo.id}
-                  videoRef={videoRef}
-                  comments={comments}
-                  onAddComment={handleAddComment}
-                  onDeleteComment={handleDeleteComment}
-                  currentTime={currentTime}
-                  isPlaying={isPlaying}
-                  onPause={pauseVideo}
-                />
-              )}
+              {/* Annotation Overlay - Always show comments, but only allow editing when active */}
+              <VideoAnnotationOverlay
+                videoId={currentVideo.id}
+                videoRef={videoRef}
+                comments={comments}
+                onAddComment={handleAddComment}
+                onDeleteComment={handleDeleteComment}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
+                onPause={pauseVideo}
+                isActive={showAnnotations}
+              />
 
               {/* Play/Pause Overlay */}
               {!showAnnotations && (
@@ -908,12 +959,13 @@ export function VideoPanel() {
                   onClick={() => {
                     const newState = !showAnnotations
                     setShowAnnotations(newState)
-                    setShowFeedbackPanel(newState)
+                    // Always show feedback panel if there are comments
+                    setShowFeedbackPanel(newState || comments.length > 0)
                   }}
                   className={`btn-secondary flex items-center gap-2 ${showAnnotations ? 'bg-accent/20 border-accent' : ''}`}
                 >
                   <MessageSquare className="w-4 h-4" />
-                  {showAnnotations ? 'Close Feedback' : 'Feedback'}
+                  {showAnnotations ? 'Stop Annotating' : 'Add Feedback'}
                   {comments.length > 0 && (
                     <span className="ml-1 text-xs bg-accent text-white px-1.5 py-0.5 rounded-full">
                       {comments.length}
