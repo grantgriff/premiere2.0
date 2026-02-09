@@ -24,11 +24,21 @@ import { EditingPanel } from '@/components/ui/EditingPanel'
 import { Segment } from '@/components/ui/VideoTimeline'
 import { VideoAnnotationOverlay, VideoComment } from '@/components/ui/VideoAnnotationOverlay'
 import { RegenerateWithFeedbackDialog } from '@/components/ui/RegenerateWithFeedbackDialog'
+import { startGeneration, pollVideoStatus, VideoStatusResponse, createMessageApi } from '@/lib/api'
+import { generateId } from '@/lib/utils'
 
 export function VideoPanel() {
   const currentVideo = useAppStore((state) => state.currentVideo)
   const isGenerating = useAppStore((state) => state.isGenerating)
   const generationProgress = useAppStore((state) => state.generationProgress)
+  const activeConversationId = useAppStore((state) => state.activeConversationId)
+  const addVideo = useAppStore((state) => state.addVideo)
+  const updateVideo = useAppStore((state) => state.updateVideo)
+  const addMessage = useAppStore((state) => state.addMessage)
+  const setIsGenerating = useAppStore((state) => state.setIsGenerating)
+  const setGenerationProgress = useAppStore((state) => state.setGenerationProgress)
+  const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
+  const user = useAppStore((state) => state.user)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -178,10 +188,141 @@ export function VideoPanel() {
 
   // Handle regenerate with refined prompt
   const handleRegenerateWithPrompt = async (refinedPrompt: string, referenceFrameUrl?: string) => {
-    // TODO: Implement video generation with refined prompt and reference frame
-    console.log('Regenerating with refined prompt:', refinedPrompt)
-    console.log('Reference frame:', referenceFrameUrl)
-    alert(`Regeneration will start with refined prompt!\n\nPrompt: ${refinedPrompt}`)
+    if (!currentVideo || !activeConversationId || !user) {
+      console.error('Missing required data for regeneration')
+      return
+    }
+
+    setIsGenerating(true)
+    setGenerationProgress(0)
+
+    try {
+      // Build style references from reference frame if provided
+      const styleReferences = referenceFrameUrl
+        ? [
+            {
+              type: 'upload' as const,
+              url: referenceFrameUrl,
+              title: 'Reference Frame',
+            },
+          ]
+        : []
+
+      // Add assistant message about regeneration
+      const regeneratingMessage = {
+        id: generateId(),
+        role: 'assistant' as const,
+        content: `Regenerating ${currentVideo.duration}s video with ${currentVideo.model} using refined feedback...`,
+        timestamp: new Date(),
+      }
+      addMessage(activeConversationId, regeneratingMessage)
+      createMessageApi(activeConversationId, 'assistant', regeneratingMessage.content)
+
+      // Start generation with refined prompt
+      const response = await startGeneration({
+        prompt: refinedPrompt,
+        model: currentVideo.model,
+        duration: currentVideo.duration,
+        conversationId: activeConversationId,
+        styleReferences,
+      })
+
+      if (!response.success || !response.videoId) {
+        throw new Error(response.error || 'Failed to start regeneration')
+      }
+
+      // Create video entry
+      const newVideo = {
+        id: response.videoId,
+        prompt: refinedPrompt,
+        model: currentVideo.model,
+        duration: currentVideo.duration,
+        status: 'pending' as const,
+        videoUrl: null,
+        thumbnailUrl: null,
+        qualityScore: null,
+        qualityReport: null,
+        isVerifying: false,
+        createdAt: new Date(),
+        completedAt: null,
+      }
+      addVideo(activeConversationId, newVideo)
+
+      // Poll for completion
+      pollVideoStatus(response.videoId, (status: VideoStatusResponse) => {
+        // Update progress
+        if (status.status === 'processing') {
+          const currentProgress = useAppStore.getState().generationProgress
+          setGenerationProgress(Math.min(currentProgress + 10, 90))
+        }
+
+        // Update video in store
+        updateVideo(activeConversationId, response.videoId!, {
+          status: status.status,
+          videoUrl: status.videoUrl,
+          thumbnailUrl: status.thumbnailUrl,
+          qualityScore: status.qualityScore,
+          completedAt: status.completedAt ? new Date(status.completedAt) : null,
+        })
+
+        // Handle completion
+        if (status.status === 'completed' && status.videoUrl) {
+          setGenerationProgress(100)
+          setIsGenerating(false)
+
+          // Set as current video
+          const completedVideo = {
+            id: response.videoId!,
+            prompt: refinedPrompt,
+            model: currentVideo.model,
+            duration: currentVideo.duration,
+            status: 'completed' as const,
+            videoUrl: status.videoUrl,
+            thumbnailUrl: status.thumbnailUrl,
+            qualityScore: status.qualityScore,
+            qualityReport: null,
+            isVerifying: false,
+            createdAt: new Date(),
+            completedAt: status.completedAt ? new Date(status.completedAt) : null,
+          }
+          setCurrentVideo(completedVideo)
+
+          // Add completion message
+          const completionMsg = `✓ Regeneration complete with refined feedback!`
+          addMessage(activeConversationId, {
+            id: generateId(),
+            role: 'assistant' as const,
+            content: completionMsg,
+            timestamp: new Date(),
+          })
+          createMessageApi(activeConversationId, 'assistant', completionMsg)
+        }
+
+        // Handle failure
+        if (status.status === 'failed') {
+          setIsGenerating(false)
+          const errorMsg = `✗ Regeneration failed: ${status.error || 'Unknown error'}`
+          addMessage(activeConversationId, {
+            id: generateId(),
+            role: 'assistant' as const,
+            content: errorMsg,
+            timestamp: new Date(),
+          })
+          createMessageApi(activeConversationId, 'assistant', errorMsg)
+        }
+      })
+    } catch (error) {
+      setIsGenerating(false)
+      console.error('Failed to regenerate video:', error)
+      const errorMsg = `✗ Failed to start regeneration: ${error instanceof Error ? error.message : 'Unknown error'}`
+      addMessage(activeConversationId, {
+        id: generateId(),
+        role: 'assistant' as const,
+        content: errorMsg,
+        timestamp: new Date(),
+      })
+      createMessageApi(activeConversationId, 'assistant', errorMsg)
+    }
   }
 
   // Load comments when video changes
