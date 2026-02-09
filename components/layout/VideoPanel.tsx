@@ -190,11 +190,21 @@ export function VideoPanel() {
     setGenerationProgress(0)
 
     try {
-      // Determine context to send based on video position in timeline
+      // Determine context to send based on video position in timeline AND model capabilities
       let contextType: 'characters' | 'previous_frame' | 'reference_frame' | 'none' = 'none'
       let characterIds: string[] | undefined
       let firstFrameUrl: string | undefined
       const styleReferences: Array<{ type: 'upload'; url: string; title: string }> = []
+
+      // Model capability flags
+      const supportsFirstFrame = currentVideo.model === 'veo3_1' // Only Veo 3.1 supports firstFrameGcsUri
+      const supportsCharacters = true // All models support characters (Veo uses GCS URIs, others use HTTP URLs)
+
+      console.log('[Regenerate] Model capabilities:', {
+        model: currentVideo.model,
+        supportsFirstFrame,
+        supportsCharacters,
+      })
 
       // Check if this video is part of a movie/timeline
       const videoInMovie = movies.find(movie =>
@@ -208,19 +218,33 @@ export function VideoPanel() {
         )
 
         if (currentClipIndex > 0) {
-          // This is a continuation video - use previous clip's last frame
+          // This is a continuation video - use previous clip's last frame IF model supports it
           const previousClip = videoInMovie.clips[currentClipIndex - 1]
-          if (previousClip.lastFrameUrl) {
+          if (previousClip.lastFrameUrl && supportsFirstFrame) {
             firstFrameUrl = previousClip.lastFrameUrl
             contextType = 'previous_frame'
-            console.log('[Regenerate] Using previous clip last frame for timeline continuation')
+            console.log('[Regenerate] Using previous clip last frame for timeline continuation (Veo only)')
+          } else if (previousClip.lastFrameUrl && !supportsFirstFrame) {
+            console.log(`[Regenerate] ⚠️ Previous frame available but ${currentVideo.model} doesn't support firstFrame - falling back to characters`)
+            // Fall back to characters if model doesn't support first frame
+            const characters = useAppStore.getState().characters
+            if (characters.length > 0 && characters[0].embeddingStatus === 'ready' && supportsCharacters) {
+              characterIds = characters.map(c => c.id)
+              contextType = 'characters'
+            }
+          } else if (!previousClip.lastFrameUrl) {
+            console.log('[Regenerate] ⚠️ No last frame available from previous clip')
+            // Fall back to characters
+            const characters = useAppStore.getState().characters
+            if (characters.length > 0 && characters[0].embeddingStatus === 'ready' && supportsCharacters) {
+              characterIds = characters.map(c => c.id)
+              contextType = 'characters'
+            }
           }
         } else if (currentClipIndex === 0) {
           // First video in timeline - use characters from conversation
-          const conversation = useAppStore.getState().conversations.find(c => c.id === activeConversationId)
           const characters = useAppStore.getState().characters
-          // Get character references from conversation context (this is simplified - you may need more logic)
-          if (characters.length > 0 && characters[0].embeddingStatus === 'ready') {
+          if (characters.length > 0 && characters[0].embeddingStatus === 'ready' && supportsCharacters) {
             characterIds = characters.map(c => c.id)
             contextType = 'characters'
             console.log('[Regenerate] Using character references for first video in timeline')
@@ -229,7 +253,7 @@ export function VideoPanel() {
       } else {
         // Not in a movie - this is a standalone video, use characters from conversation
         const characters = useAppStore.getState().characters
-        if (characters.length > 0 && characters[0].embeddingStatus === 'ready') {
+        if (characters.length > 0 && characters[0].embeddingStatus === 'ready' && supportsCharacters) {
           characterIds = characters.map(c => c.id)
           contextType = 'characters'
           console.log('[Regenerate] Using character references for standalone video')
@@ -246,7 +270,12 @@ export function VideoPanel() {
         contextType = 'reference_frame'
       }
 
-      console.log('[Regenerate] Context:', { contextType, characterIds, firstFrameUrl, styleReferences })
+      console.log('[Regenerate] Final context:', {
+        contextType,
+        characterIds: characterIds?.length || 0,
+        firstFrameUrl: firstFrameUrl ? 'yes' : 'no',
+        styleReferences: styleReferences.length,
+      })
 
       // Add assistant message about regeneration
       const regeneratingMessage = {
