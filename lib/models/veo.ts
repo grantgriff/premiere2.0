@@ -382,9 +382,16 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
     }
 
     const data: VertexOperationResponse = await response.json()
-    console.log('[Veo] Operation status:', data.done ? 'done' : 'in progress')
+    console.log('[Veo] Status check response:', JSON.stringify(data))
+    console.log('[Veo] Operation status:', data.done ? 'done' : 'in progress', 'Operation name:', operationName)
 
     if (data.error) {
+      console.error('[Veo] Generation failed:', {
+        operationName,
+        errorCode: data.error.code,
+        errorMessage: data.error.message,
+        errorDetails: data.error.details
+      })
       return {
         status: 'failed',
         error: data.error.message
@@ -498,7 +505,7 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
           .from(STORAGE_BUCKETS.VIDEOS)
           .getPublicUrl(uploadData.path)
 
-        console.log('[Veo] Video uploaded successfully:', urlData.publicUrl)
+        console.log('[Veo] ✓ Generation completed successfully. Video uploaded to:', urlData.publicUrl)
 
         return {
           status: 'completed',
@@ -514,7 +521,17 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
       }
     }
 
+    // Check for done without video (API bug)
+    if (data.done && (!data.response || !data.response.videos || data.response.videos.length === 0)) {
+      console.error('[Veo] Operation marked done but no videos in response:', JSON.stringify(data))
+      return {
+        status: 'failed',
+        error: 'Veo marked operation as complete but did not provide video'
+      }
+    }
+
     // Still processing
+    console.log('[Veo] Still processing...')
     return { status: 'processing' }
   } catch (error) {
     console.error('[Veo] Status check exception:', error)
