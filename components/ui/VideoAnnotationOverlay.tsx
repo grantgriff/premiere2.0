@@ -42,15 +42,15 @@ export function VideoAnnotationOverlay({
 }: VideoAnnotationOverlayProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [commentText, setCommentText] = useState('')
-  const [commentPosition, setCommentPosition] = useState<{ x: number; y: number } | null>(null)
+  const [clickPosition, setClickPosition] = useState<{ x: number; y: number } | null>(null)
   const [boundingBox, setBoundingBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const [isDrawingBox, setIsDrawingBox] = useState(false)
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
 
-  // Handle click on video to create comment
-  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isCreating || isDrawingBox) return // Don't create new comment if already creating one
+  // Start drawing bounding box OR click to create comment
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isCreating) return // Already creating a comment
 
     const rect = e.currentTarget.getBoundingClientRect()
     const x = ((e.clientX - rect.left) / rect.width) * 100
@@ -59,50 +59,47 @@ export function VideoAnnotationOverlay({
     // Pause video
     onPause()
 
-    // Start creating comment at this position
-    setCommentPosition({ x, y })
-    setIsCreating(true)
-    setBoundingBox(null)
-  }
-
-  // Start drawing bounding box
-  const handleStartDrawBox = (e: React.MouseEvent<HTMLElement>) => {
-    e.stopPropagation()
-    if (!overlayRef.current) return
-
-    const rect = overlayRef.current.getBoundingClientRect()
-    const x = ((e.clientX - rect.left) / rect.width) * 100
-    const y = ((e.clientY - rect.top) / rect.height) * 100
-
+    // Start potential box drag
     setDrawStart({ x, y })
-    setIsDrawingBox(true)
+    setClickPosition({ x, y })
   }
 
   // Update bounding box while dragging
-  const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
-    if (!isDrawingBox || !drawStart || !overlayRef.current) return
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!drawStart || !overlayRef.current) return
 
     const rect = overlayRef.current.getBoundingClientRect()
     const currentX = ((e.clientX - rect.left) / rect.width) * 100
     const currentY = ((e.clientY - rect.top) / rect.height) * 100
 
-    const width = currentX - drawStart.x
-    const height = currentY - drawStart.y
+    // Calculate distance from start
+    const deltaX = Math.abs(currentX - drawStart.x)
+    const deltaY = Math.abs(currentY - drawStart.y)
 
-    setBoundingBox({
-      x: width < 0 ? currentX : drawStart.x,
-      y: height < 0 ? currentY : drawStart.y,
-      width: Math.abs(width),
-      height: Math.abs(height),
-    })
+    // If moved more than 2%, consider it a drag
+    if (deltaX > 2 || deltaY > 2) {
+      setIsDrawingBox(true)
+
+      const width = currentX - drawStart.x
+      const height = currentY - drawStart.y
+
+      setBoundingBox({
+        x: width < 0 ? currentX : drawStart.x,
+        y: height < 0 ? currentY : drawStart.y,
+        width: Math.abs(width),
+        height: Math.abs(height),
+      })
+    }
   }
 
-  // Finish drawing bounding box
+  // Finish drawing - show comment input
   const handleMouseUp = () => {
-    if (isDrawingBox) {
-      setIsDrawingBox(false)
-      setDrawStart(null)
-    }
+    if (!drawStart) return
+
+    // If we were drawing a box or just clicked, show the comment input
+    setIsCreating(true)
+    setDrawStart(null)
+    setIsDrawingBox(false)
   }
 
   // Save comment
@@ -124,7 +121,7 @@ export function VideoAnnotationOverlay({
     // Reset state
     setIsCreating(false)
     setCommentText('')
-    setCommentPosition(null)
+    setClickPosition(null)
     setBoundingBox(null)
   }
 
@@ -132,7 +129,7 @@ export function VideoAnnotationOverlay({
   const handleCancelComment = () => {
     setIsCreating(false)
     setCommentText('')
-    setCommentPosition(null)
+    setClickPosition(null)
     setBoundingBox(null)
     setIsDrawingBox(false)
     setDrawStart(null)
@@ -180,39 +177,45 @@ export function VideoAnnotationOverlay({
     <div
       ref={overlayRef}
       className="absolute inset-0 z-50 cursor-crosshair overflow-visible"
-      onClick={!isCreating ? handleOverlayClick : undefined}
+      onMouseDown={!isCreating ? handleMouseDown : undefined}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       style={{ pointerEvents: 'auto' }}
     >
       {/* Existing Comments */}
-      {comments.map((comment) => (
-        <div
-          key={comment.id}
-          className="absolute"
-          style={{
-            left: `${comment.boundingBox?.x || 0}%`,
-            top: `${comment.boundingBox?.y || 0}%`,
-          }}
-        >
-          {/* Bounding Box */}
-          {comment.boundingBox && (
-            <div
-              className="absolute border-2 border-yellow-400 bg-yellow-400/10 pointer-events-none"
-              style={{
-                width: `${comment.boundingBox.width}%`,
-                height: `${comment.boundingBox.height}%`,
-                transform: 'translate(-50%, -50%)',
-              }}
-            />
-          )}
+      {comments.map((comment) => {
+        // Use bounding box position if available, otherwise use 0,0
+        const boxX = comment.boundingBox?.x || 0
+        const boxY = comment.boundingBox?.y || 0
 
-          {/* Comment Marker - Sleek teardrop pin, always visible */}
+        return (
           <div
-            className="absolute -translate-x-1/2 -translate-y-full cursor-pointer hover:scale-110 transition-transform group"
-            style={{ top: 0, left: 0 }}
-            title={`${formatTime(comment.timestamp)}: ${comment.text}`}
+            key={comment.id}
+            className="absolute pointer-events-none"
+            style={{
+              left: `${boxX}%`,
+              top: `${boxY}%`,
+            }}
           >
+            {/* Bounding Box */}
+            {comment.boundingBox && (
+              <div
+                className="absolute border-2 border-yellow-400 bg-yellow-400/10"
+                style={{
+                  width: `${comment.boundingBox.width}%`,
+                  height: `${comment.boundingBox.height}%`,
+                  left: 0,
+                  top: 0,
+                }}
+              />
+            )}
+
+            {/* Comment Marker - Sleek teardrop pin, always visible */}
+            <div
+              className="absolute -translate-x-1/2 -translate-y-full cursor-pointer hover:scale-110 transition-transform group pointer-events-auto"
+              style={{ top: 0, left: 0 }}
+              title={`${formatTime(comment.timestamp)}: ${comment.text}`}
+            >
             {/* Teardrop pin design */}
             <div className="relative">
               <MapPin className="w-8 h-8 text-yellow-400 drop-shadow-[0_2px_8px_rgba(250,204,21,0.5)] fill-yellow-400/90 stroke-yellow-600 stroke-[1.5]" />
@@ -237,81 +240,63 @@ export function VideoAnnotationOverlay({
               </button>
             </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
 
-      {/* New Comment Creation */}
-      {isCreating && commentPosition && (
+      {/* Active Bounding Box (while dragging or after creating) */}
+      {boundingBox && (
         <div
-          className="absolute z-40"
+          className="absolute border-2 border-blue-400 bg-blue-400/10 pointer-events-none"
           style={{
-            left: `${commentPosition.x}%`,
-            top: `${commentPosition.y}%`,
-            transform: 'translate(-50%, -50%)',
+            left: `${boundingBox.x}%`,
+            top: `${boundingBox.y}%`,
+            width: `${boundingBox.width}%`,
+            height: `${boundingBox.height}%`,
           }}
-        >
-          {/* Current Bounding Box */}
-          {boundingBox && (
-            <div
-              className="absolute border-2 border-blue-400 bg-blue-400/10"
-              style={{
-                left: `${boundingBox.x - commentPosition.x}%`,
-                top: `${boundingBox.y - commentPosition.y}%`,
-                width: `${boundingBox.width}%`,
-                height: `${boundingBox.height}%`,
-              }}
-            />
-          )}
+        />
+      )}
 
-          {/* Comment Input Card */}
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 bg-black/95 border border-[#3a3a3a] rounded-lg shadow-2xl p-4 z-[100]">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-foreground-secondary">
-                @ {formatTime(currentTime)}
-              </span>
-              <button
-                onClick={handleCancelComment}
-                className="text-foreground-secondary hover:text-foreground"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <textarea
-              autoFocus
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              placeholder="Add your feedback..."
-              className="w-full h-20 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-foreground-secondary focus:outline-none focus:border-accent resize-none"
-            />
-
-            <div className="flex items-center gap-2 mt-3">
-              <button
-                onClick={handleStartDrawBox}
-                onMouseDown={handleStartDrawBox}
-                className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
-                  boundingBox
-                    ? 'bg-blue-500/20 border-blue-500 text-blue-400'
-                    : 'border-[#3a3a3a] text-foreground-secondary hover:border-[#4a4a4a]'
-                } flex items-center justify-center gap-2`}
-              >
-                <Square className="w-4 h-4" />
-                {boundingBox ? 'Box Added' : 'Add Box'}
-              </button>
-              <button
-                onClick={handleSaveComment}
-                disabled={!commentText.trim()}
-                className="px-4 py-2 bg-accent hover:bg-accent/90 disabled:bg-accent/50 disabled:cursor-not-allowed text-white text-sm rounded-lg flex items-center gap-2 transition-colors"
-              >
-                <Check className="w-4 h-4" />
-                Save
-              </button>
-            </div>
+      {/* Comment Input Dialog */}
+      {isCreating && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 bg-black/95 border border-[#3a3a3a] rounded-lg shadow-2xl p-4 z-[100]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-foreground-secondary">
+              @ {formatTime(currentTime)}
+              {boundingBox && ' • Area selected'}
+            </span>
+            <button
+              onClick={handleCancelComment}
+              className="text-foreground-secondary hover:text-foreground"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
 
-          {/* Center Marker */}
-          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
-            <MessageSquare className="w-4 h-4 text-white" />
+          <textarea
+            autoFocus
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                handleSaveComment()
+              }
+            }}
+            placeholder="Add your feedback..."
+            className="w-full h-20 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-foreground-secondary focus:outline-none focus:border-accent resize-none"
+          />
+
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-xs text-foreground-secondary">
+              {boundingBox ? '✓ Area captured' : 'Click saved'}
+            </span>
+            <button
+              onClick={handleSaveComment}
+              disabled={!commentText.trim()}
+              className="px-4 py-2 bg-accent hover:bg-accent/90 disabled:bg-accent/50 disabled:cursor-not-allowed text-white text-sm rounded-lg flex items-center gap-2 transition-colors"
+            >
+              <Check className="w-4 h-4" />
+              Save
+            </button>
           </div>
         </div>
       )}
@@ -319,7 +304,7 @@ export function VideoAnnotationOverlay({
       {/* Instructions */}
       {!isCreating && comments.length === 0 && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/80 text-white text-sm px-4 py-2 rounded-lg">
-          Click anywhere on the video to add a comment
+          Click to add comment • Drag to highlight area
         </div>
       )}
     </div>

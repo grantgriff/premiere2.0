@@ -71,13 +71,17 @@ export function VideoPanel() {
 
     const loadComments = async () => {
       try {
+        console.log('[VideoPanel] Loading comments for video:', currentVideo.id)
         const response = await fetch(`/api/videos/${currentVideo.id}/comments`)
         if (response.ok) {
           const data = await response.json()
+          console.log('[VideoPanel] Loaded comments:', data.comments)
           setComments(data.comments || [])
+        } else {
+          console.error('[VideoPanel] Failed to load comments:', response.status)
         }
       } catch (error) {
-        console.error('Failed to load comments:', error)
+        console.error('[VideoPanel] Exception loading comments:', error)
       }
     }
 
@@ -453,6 +457,7 @@ export function VideoPanel() {
     if (!currentVideo) return
 
     try {
+      console.log('[VideoPanel] Adding comment:', comment)
       const response = await fetch(`/api/videos/${currentVideo.id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -461,14 +466,21 @@ export function VideoPanel() {
 
       if (response.ok) {
         const data = await response.json()
-        setComments((prev) => [...prev, data.comment])
+        console.log('[VideoPanel] Comment added successfully:', data.comment)
+        setComments((prev) => {
+          const updated = [...prev, data.comment]
+          console.log('[VideoPanel] Updated comments state:', updated)
+          return updated
+        })
         // Show feedback panel when first comment is added
         if (comments.length === 0) {
           setShowFeedbackPanel(true)
         }
+      } else {
+        console.error('[VideoPanel] Failed to add comment:', response.status)
       }
     } catch (error) {
-      console.error('Failed to add comment:', error)
+      console.error('[VideoPanel] Exception adding comment:', error)
     }
   }
 
