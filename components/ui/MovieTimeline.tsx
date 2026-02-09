@@ -173,6 +173,7 @@ export function MovieTimeline() {
 
     const newClip = {
       id: crypto.randomUUID(),
+      movieId: activeMovie.id,
       videoId: video.id,
       position: activeMovie.clips.length,
       firstFrameUrl: null,
@@ -215,9 +216,30 @@ export function MovieTimeline() {
     <div className="h-40 border-t border-border bg-background-secondary flex items-center px-4 gap-4">
       {/* Timeline header */}
       <div className="flex flex-col items-center justify-center px-4 border-r border-border h-full min-w-[140px]">
-        <div className="text-sm font-medium text-foreground mb-1">
-          {activeMovie.title}
-        </div>
+        {isEditingTitle ? (
+          <input
+            type="text"
+            value={editingTitle}
+            onChange={(e) => setEditingTitle(e.target.value)}
+            onBlur={handleSaveTitle}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSaveTitle()
+              } else if (e.key === 'Escape') {
+                setIsEditingTitle(false)
+              }
+            }}
+            autoFocus
+            className="text-sm font-medium text-foreground mb-1 px-2 py-1 bg-background border border-accent rounded w-full text-center"
+          />
+        ) : (
+          <div
+            onClick={handleStartEditingTitle}
+            className="text-sm font-medium text-foreground mb-1 cursor-pointer hover:text-accent transition-colors"
+          >
+            {activeMovie.title}
+          </div>
+        )}
         <div className="text-xs text-foreground-secondary mb-2">
           {activeMovie.clips.length} clip{activeMovie.clips.length !== 1 ? 's' : ''}
         </div>
@@ -308,7 +330,10 @@ export function MovieTimeline() {
               {/* Play/Pause button */}
               {clip.video?.videoUrl && (
                 <button
-                  onClick={() => togglePlayClip(clip.id)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    togglePlayClip(clip.id)
+                  }}
                   className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 transition-colors"
                 >
                   {isPlaying ? (
@@ -325,7 +350,10 @@ export function MovieTimeline() {
 
               {/* Remove button */}
               <button
-                onClick={() => handleRemoveClip(clip.id)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleRemoveClip(clip.id)
+                }}
                 className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500/80 hover:bg-red-500 text-white p-1 rounded z-10"
               >
                 <X className="w-3 h-3" />
