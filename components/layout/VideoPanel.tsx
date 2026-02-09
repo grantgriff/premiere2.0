@@ -57,6 +57,25 @@ export function VideoPanel() {
   const [isCreatingMovie, setIsCreatingMovie] = useState(false)
   const videoContainerRef = useRef<HTMLDivElement>(null)
 
+  // Load existing comments when video changes
+  useEffect(() => {
+    if (!currentVideo) return
+
+    const loadComments = async () => {
+      try {
+        const response = await fetch(`/api/videos/${currentVideo.id}/comments`)
+        if (response.ok) {
+          const data = await response.json()
+          setComments(data.comments || [])
+        }
+      } catch (error) {
+        console.error('Failed to load comments:', error)
+      }
+    }
+
+    loadComments()
+  }, [currentVideo?.id])
+
   // Handle video time updates
   useEffect(() => {
     const video = videoRef.current

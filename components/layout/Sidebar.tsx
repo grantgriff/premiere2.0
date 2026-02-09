@@ -100,8 +100,12 @@ export function Sidebar() {
   }, [newDropdownOpen])
 
   const handleNewClip = () => {
+    // Clear current state
     setCurrentVideo(null)
     setActiveConversation(null)
+    setMultiModelMode(false)
+
+    // Switch to conversations tab
     setActiveTab('conversations')
     setNewDropdownOpen(false)
   }
