@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Plus,
   Search,
@@ -56,6 +56,7 @@ export function Sidebar() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Today', 'Yesterday']))
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
+  const [newDropdownOpen, setNewDropdownOpen] = useState(false)
 
   // Global state - Conversations
   const user = useAppStore((state) => state.user)
@@ -87,42 +88,57 @@ export function Sidebar() {
     [filteredConversations]
   )
 
-  const handleNew = async () => {
-    if (activeTab === 'conversations') {
-      setCurrentVideo(null)
-      setActiveConversation(null)
-    } else {
-      // Create new movie
-      if (!user?.id) return
-
-      const newMovie = {
-        id: crypto.randomUUID(),
-        userId: user.id,
-        title: `Movie ${movies.length + 1}`,
-        description: null,
-        thumbnailUrl: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        clips: []
-      }
-
-      // Add to local store
-      useAppStore.getState().addMovie(newMovie)
-
-      // Create in API
-      try {
-        await fetch('/api/movies', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            title: newMovie.title,
-          }),
-        })
-      } catch (error) {
-        console.error('[Sidebar] Failed to create movie:', error)
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (newDropdownOpen && !(e.target as Element).closest('.new-dropdown-container')) {
+        setNewDropdownOpen(false)
       }
     }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [newDropdownOpen])
+
+  const handleNewClip = () => {
+    setCurrentVideo(null)
+    setActiveConversation(null)
+    setActiveTab('conversations')
+    setNewDropdownOpen(false)
+  }
+
+  const handleNewMovie = async () => {
+    if (!user?.id) return
+
+    const newMovie = {
+      id: crypto.randomUUID(),
+      userId: user.id,
+      title: `Movie ${movies.length + 1}`,
+      description: null,
+      thumbnailUrl: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      clips: []
+    }
+
+    // Add to local store
+    useAppStore.getState().addMovie(newMovie)
+
+    // Create in API
+    try {
+      await fetch('/api/movies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          title: newMovie.title,
+        }),
+      })
+    } catch (error) {
+      console.error('[Sidebar] Failed to create movie:', error)
+    }
+
+    setActiveTab('movies')
+    setNewDropdownOpen(false)
   }
 
   const handleSelectConversation = (id: string) => {
@@ -186,15 +202,36 @@ export function Sidebar() {
 
   return (
     <aside className="w-64 h-full flex flex-col bg-[#171717] border-r border-[#2a2a2a]">
-      {/* Header with New Button */}
-      <div className="p-3">
+      {/* Header with New Dropdown */}
+      <div className="p-3 relative new-dropdown-container">
         <button
-          onClick={handleNew}
+          onClick={() => setNewDropdownOpen(!newDropdownOpen)}
           className="w-full h-10 rounded-lg border border-[#3a3a3a] hover:bg-[#2a2a2a] flex items-center justify-center gap-2 text-sm text-foreground transition-colors"
         >
           <Plus className="w-4 h-4" />
-          {activeTab === 'conversations' ? 'New video' : 'New movie'}
+          New
+          <ChevronDown className="w-3 h-3 ml-auto" />
         </button>
+
+        {/* Dropdown Menu */}
+        {newDropdownOpen && (
+          <div className="absolute top-14 left-3 right-3 z-50 bg-[#1a1a1a] border border-[#3a3a3a] rounded-lg shadow-xl overflow-hidden new-dropdown-container">
+            <button
+              onClick={handleNewClip}
+              className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-[#2a2a2a] transition-colors flex items-center gap-2"
+            >
+              <Video className="w-4 h-4" />
+              New Clip
+            </button>
+            <button
+              onClick={handleNewMovie}
+              className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-[#2a2a2a] transition-colors flex items-center gap-2 border-t border-[#2a2a2a]"
+            >
+              <Plus className="w-4 h-4" />
+              New Movie
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -208,7 +245,7 @@ export function Sidebar() {
                 : 'text-foreground-secondary hover:text-foreground'
             }`}
           >
-            Conversations
+            Clips
           </button>
           <button
             onClick={() => setActiveTab('movies')}
@@ -237,14 +274,14 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Conversations Tab */}
+      {/* Clips Tab */}
       {activeTab === 'conversations' && (
         <div className="flex-1 overflow-y-auto px-2 scrollbar-thin">
           {groupedConversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <Video className="w-10 h-10 text-foreground-secondary mb-3 opacity-50" />
             <p className="text-sm text-foreground-secondary">
-              {searchQuery ? 'No matching conversations' : 'No conversations yet'}
+              {searchQuery ? 'No matching clips' : 'No clips yet'}
             </p>
             <p className="text-xs text-foreground-secondary mt-1 opacity-70">
               {searchQuery ? 'Try a different search' : 'Start creating videos!'}
@@ -270,7 +307,7 @@ export function Sidebar() {
                   </span>
                 </button>
 
-                {/* Conversations */}
+                {/* Clips */}
                 {expandedGroups.has(group.label) && (
                   <div className="mt-1 space-y-0.5">
                     {group.conversations.map((convo) => (

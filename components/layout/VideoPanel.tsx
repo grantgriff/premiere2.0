@@ -6,7 +6,6 @@ import {
   Pause,
   Download,
   RefreshCw,
-  Scissors,
   Maximize2,
   Volume2,
   VolumeX,
@@ -14,18 +13,32 @@ import {
   Shield,
   Youtube,
   Share2,
+  MessageSquare,
+  Film,
+  X,
 } from 'lucide-react'
 import { useAppStore, Video } from '@/lib/store'
 import { QualityBadge } from '@/components/ui/QualityBadge'
 import { QualityReport } from '@/lib/models/types'
 import { YouTubeUploadPanel } from '@/components/ui/YouTubeUploadPanel'
-import { EditingPanel } from '@/components/ui/EditingPanel'
-import { Segment } from '@/components/ui/VideoTimeline'
+import { VideoAnnotationOverlay, VideoComment } from '@/components/ui/VideoAnnotationOverlay'
+import { RegenerateWithFeedbackDialog } from '@/components/ui/RegenerateWithFeedbackDialog'
+import { startGeneration, pollVideoStatus, VideoStatusResponse, createMessage } from '@/lib/api'
+import { generateId } from '@/lib/utils'
 
 export function VideoPanel() {
   const currentVideo = useAppStore((state) => state.currentVideo)
   const isGenerating = useAppStore((state) => state.isGenerating)
   const generationProgress = useAppStore((state) => state.generationProgress)
+  const activeConversationId = useAppStore((state) => state.activeConversationId)
+  const addVideo = useAppStore((state) => state.addVideo)
+  const updateVideo = useAppStore((state) => state.updateVideo)
+  const addMessage = useAppStore((state) => state.addMessage)
+  const setIsGenerating = useAppStore((state) => state.setIsGenerating)
+  const setGenerationProgress = useAppStore((state) => state.setGenerationProgress)
+  const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
+  const user = useAppStore((state) => state.user)
+  const movies = useAppStore((state) => state.movies)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -33,8 +46,11 @@ export function VideoPanel() {
   const [progress, setProgress] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [showYouTubeUpload, setShowYouTubeUpload] = useState(false)
-  const [showEditingPanel, setShowEditingPanel] = useState(false)
-  const [isEditProcessing, setIsEditProcessing] = useState(false)
+  const [comments, setComments] = useState<VideoComment[]>([])
+  const [showAnnotations, setShowAnnotations] = useState(false)
+  const [showRegenerateDialog, setShowRegenerateDialog] = useState(false)
+  const [showAddToMovieDialog, setShowAddToMovieDialog] = useState(false)
+  const videoContainerRef = useRef<HTMLDivElement>(null)
 
   // Handle video time updates
   useEffect(() => {
@@ -113,54 +129,272 @@ export function VideoPanel() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  // Seek to specific time (for editing panel)
-  const handleSeekTo = (time: number) => {
-    const video = videoRef.current
-    if (!video) return
-    video.currentTime = time
-    setCurrentTime(time)
-  }
-
-  // Handle extend video
-  const handleExtend = async (fromTime: number, prompt: string, duration: number) => {
-    setIsEditProcessing(true)
-    try {
-      // TODO: Implement extend functionality via API
-      console.log('Extend video:', { fromTime, prompt, duration })
-      alert('Extend functionality coming soon!')
-    } finally {
-      setIsEditProcessing(false)
-    }
-  }
-
-  // Handle remix segment
-  const handleRemix = async (segment: Segment, prompt: string) => {
-    setIsEditProcessing(true)
-    try {
-      // TODO: Implement remix functionality via API
-      console.log('Remix segment:', { segment, prompt })
-      alert('Remix functionality coming soon!')
-    } finally {
-      setIsEditProcessing(false)
-    }
-  }
-
-  // Handle trim video
-  const handleTrim = async (startTime: number, endTime: number) => {
-    setIsEditProcessing(true)
-    try {
-      // TODO: Update video state after trim
-      console.log('Trim video:', { startTime, endTime })
-    } finally {
-      setIsEditProcessing(false)
-    }
-  }
-
-  // Handle regenerate
+  // Handle regenerate - open dialog if comments exist
   const handleRegenerate = () => {
     if (!currentVideo) return
-    // TODO: Trigger regeneration with same prompt
-    alert(`Regenerate functionality coming soon!\nPrompt: ${currentVideo.prompt}`)
+
+    if (comments.length > 0) {
+      // Open regenerate dialog with feedback
+      setShowRegenerateDialog(true)
+    } else {
+      // Simple regenerate without feedback
+      // TODO: Implement simple regeneration
+      alert(`Regenerate functionality coming soon!\nPrompt: ${currentVideo.prompt}`)
+    }
+  }
+
+  // Handle regenerate with refined prompt
+  const handleRegenerateWithPrompt = async (refinedPrompt: string, referenceFrameUrl?: string) => {
+    if (!currentVideo || !activeConversationId || !user) {
+      console.error('Missing required data for regeneration')
+      return
+    }
+
+    setIsGenerating(true)
+    setGenerationProgress(0)
+
+    try {
+      // Build style references from reference frame if provided
+      const styleReferences = referenceFrameUrl
+        ? [
+            {
+              type: 'upload' as const,
+              url: referenceFrameUrl,
+              title: 'Reference Frame',
+            },
+          ]
+        : []
+
+      // Add assistant message about regeneration
+      const regeneratingMessage = {
+        id: generateId(),
+        role: 'assistant' as const,
+        content: `Regenerating ${currentVideo.duration}s video with ${currentVideo.model} using refined feedback...`,
+        timestamp: new Date(),
+      }
+      addMessage(activeConversationId, regeneratingMessage)
+      createMessage(activeConversationId, 'assistant', regeneratingMessage.content)
+
+      // Start generation with refined prompt
+      const response = await startGeneration({
+        prompt: refinedPrompt,
+        model: currentVideo.model,
+        duration: currentVideo.duration,
+        conversationId: activeConversationId,
+        styleReferences,
+      })
+
+      if (!response.success || !response.videoId) {
+        throw new Error(response.error || 'Failed to start regeneration')
+      }
+
+      // Create video entry
+      const newVideo = {
+        id: response.videoId,
+        prompt: refinedPrompt,
+        model: currentVideo.model,
+        duration: currentVideo.duration,
+        status: 'pending' as const,
+        videoUrl: null,
+        thumbnailUrl: null,
+        qualityScore: null,
+        qualityReport: null,
+        isVerifying: false,
+        createdAt: new Date(),
+        completedAt: null,
+      }
+      addVideo(activeConversationId, newVideo)
+
+      // Poll for completion
+      pollVideoStatus(response.videoId, (status: VideoStatusResponse) => {
+        // Update progress
+        if (status.status === 'processing') {
+          const currentProgress = useAppStore.getState().generationProgress
+          setGenerationProgress(Math.min(currentProgress + 10, 90))
+        }
+
+        // Update video in store
+        updateVideo(activeConversationId, response.videoId!, {
+          status: status.status,
+          videoUrl: status.videoUrl,
+          thumbnailUrl: status.thumbnailUrl,
+          qualityScore: status.qualityScore,
+          completedAt: status.completedAt ? new Date(status.completedAt) : null,
+        })
+
+        // Handle completion
+        if (status.status === 'completed' && status.videoUrl) {
+          setGenerationProgress(100)
+          setIsGenerating(false)
+
+          // Set as current video
+          const completedVideo = {
+            id: response.videoId!,
+            prompt: refinedPrompt,
+            model: currentVideo.model,
+            duration: currentVideo.duration,
+            status: 'completed' as const,
+            videoUrl: status.videoUrl,
+            thumbnailUrl: status.thumbnailUrl,
+            qualityScore: status.qualityScore,
+            qualityReport: null,
+            isVerifying: false,
+            createdAt: new Date(),
+            completedAt: status.completedAt ? new Date(status.completedAt) : null,
+          }
+          setCurrentVideo(completedVideo)
+
+          // Add completion message
+          const completionMsg = `✓ Regeneration complete with refined feedback!`
+          addMessage(activeConversationId, {
+            id: generateId(),
+            role: 'assistant' as const,
+            content: completionMsg,
+            timestamp: new Date(),
+          })
+          createMessage(activeConversationId, 'assistant', completionMsg)
+        }
+
+        // Handle failure
+        if (status.status === 'failed') {
+          setIsGenerating(false)
+          const errorMsg = `✗ Regeneration failed: ${status.error || 'Unknown error'}`
+          addMessage(activeConversationId, {
+            id: generateId(),
+            role: 'assistant' as const,
+            content: errorMsg,
+            timestamp: new Date(),
+          })
+          createMessage(activeConversationId, 'assistant', errorMsg)
+        }
+      })
+    } catch (error) {
+      setIsGenerating(false)
+      console.error('Failed to regenerate video:', error)
+      const errorMsg = `✗ Failed to start regeneration: ${error instanceof Error ? error.message : 'Unknown error'}`
+      addMessage(activeConversationId, {
+        id: generateId(),
+        role: 'assistant' as const,
+        content: errorMsg,
+        timestamp: new Date(),
+      })
+      createMessage(activeConversationId, 'assistant', errorMsg)
+    }
+  }
+
+  // Load comments when video changes
+  useEffect(() => {
+    if (!currentVideo?.id) {
+      setComments([])
+      return
+    }
+
+    // Fetch comments for this video
+    const fetchComments = async () => {
+      try {
+        const response = await fetch(`/api/videos/${currentVideo.id}/comments`)
+        if (response.ok) {
+          const data = await response.json()
+          setComments(data.comments || [])
+        }
+      } catch (error) {
+        console.error('Failed to load comments:', error)
+      }
+    }
+
+    fetchComments()
+  }, [currentVideo?.id])
+
+  // Add comment
+  const handleAddComment = async (comment: Omit<VideoComment, 'id' | 'createdAt'>) => {
+    if (!currentVideo) return
+
+    try {
+      const response = await fetch(`/api/videos/${currentVideo.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(comment),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setComments((prev) => [...prev, data.comment])
+      }
+    } catch (error) {
+      console.error('Failed to add comment:', error)
+    }
+  }
+
+  // Delete comment
+  const handleDeleteComment = async (commentId: string) => {
+    if (!currentVideo) return
+
+    try {
+      const response = await fetch(`/api/videos/${currentVideo.id}/comments/${commentId}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setComments((prev) => prev.filter((c) => c.id !== commentId))
+      }
+    } catch (error) {
+      console.error('Failed to delete comment:', error)
+    }
+  }
+
+  // Pause video
+  const pauseVideo = () => {
+    if (videoRef.current && isPlaying) {
+      videoRef.current.pause()
+      setIsPlaying(false)
+    }
+  }
+
+  // Handle fullscreen
+  const handleFullscreen = () => {
+    if (!videoContainerRef.current) return
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    } else {
+      videoContainerRef.current.requestFullscreen()
+    }
+  }
+
+  // Handle add to movie
+  const handleAddToMovie = async (movieId: string) => {
+    if (!currentVideo || !user) return
+
+    try {
+      // Get the movie to find the next position
+      const movie = movies.find(m => m.id === movieId)
+      if (!movie) return
+
+      const nextPosition = movie.clips?.length || 0
+
+      // Add clip to movie
+      const response = await fetch(`/api/movies/${movieId}/clips`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId: currentVideo.id,
+          position: nextPosition,
+        }),
+      })
+
+      if (response.ok) {
+        // Reload movies to get updated data
+        const moviesResponse = await fetch(`/api/movies?userId=${user.id}`)
+        if (moviesResponse.ok) {
+          const data = await moviesResponse.json()
+          useAppStore.getState().setMovies(data.movies)
+        }
+
+        setShowAddToMovieDialog(false)
+      }
+    } catch (error) {
+      console.error('Failed to add to movie:', error)
+    }
   }
 
   return (
@@ -191,7 +425,7 @@ export function VideoPanel() {
         ) : currentVideo?.videoUrl ? (
           <div className="w-full max-w-4xl">
             {/* Video Container */}
-            <div className="video-container relative bg-black rounded-lg overflow-hidden">
+            <div ref={videoContainerRef} className="video-container relative bg-black rounded-lg overflow-hidden">
               <video
                 ref={videoRef}
                 src={currentVideo.videoUrl}
@@ -216,17 +450,33 @@ export function VideoPanel() {
                 ) : null}
               </div>
 
+              {/* Annotation Overlay */}
+              {showAnnotations && (
+                <VideoAnnotationOverlay
+                  videoId={currentVideo.id}
+                  videoRef={videoRef}
+                  comments={comments}
+                  onAddComment={handleAddComment}
+                  onDeleteComment={handleDeleteComment}
+                  currentTime={currentTime}
+                  isPlaying={isPlaying}
+                  onPause={pauseVideo}
+                />
+              )}
+
               {/* Play/Pause Overlay */}
-              <button
-                onClick={togglePlay}
-                className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity"
-              >
-                {isPlaying ? (
-                  <Pause className="w-16 h-16 text-white" />
-                ) : (
-                  <Play className="w-16 h-16 text-white" />
-                )}
-              </button>
+              {!showAnnotations && (
+                <button
+                  onClick={togglePlay}
+                  className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity"
+                >
+                  {isPlaying ? (
+                    <Pause className="w-16 h-16 text-white" />
+                  ) : (
+                    <Play className="w-16 h-16 text-white" />
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Playback Controls */}
@@ -265,7 +515,7 @@ export function VideoPanel() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button className="btn-ghost p-2">
+                  <button onClick={handleFullscreen} className="btn-ghost p-2" title="Fullscreen">
                     <Maximize2 className="w-5 h-5" />
                   </button>
                 </div>
@@ -286,6 +536,15 @@ export function VideoPanel() {
               {/* Action Buttons */}
               <div className="flex items-center gap-3 pt-2">
                 <button
+                  onClick={() => setShowAddToMovieDialog(true)}
+                  className="btn-secondary flex items-center gap-2"
+                  disabled={movies.length === 0}
+                  title={movies.length === 0 ? 'Create a movie first' : 'Add to movie'}
+                >
+                  <Film className="w-4 h-4" />
+                  Add to Movie
+                </button>
+                <button
                   onClick={handleDownload}
                   className="btn-secondary flex items-center gap-2"
                 >
@@ -297,14 +556,24 @@ export function VideoPanel() {
                   className="btn-secondary flex items-center gap-2"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  Regenerate
+                  {comments.length > 0 ? 'Regenerate with Feedback' : 'Regenerate'}
+                  {comments.length > 0 && (
+                    <span className="ml-1 text-xs bg-accent text-white px-1.5 py-0.5 rounded-full">
+                      {comments.length}
+                    </span>
+                  )}
                 </button>
                 <button
-                  onClick={() => setShowEditingPanel(!showEditingPanel)}
-                  className={`btn-secondary flex items-center gap-2 ${showEditingPanel ? 'bg-accent/20 border-accent' : ''}`}
+                  onClick={() => setShowAnnotations(!showAnnotations)}
+                  className={`btn-secondary flex items-center gap-2 ${showAnnotations ? 'bg-accent/20 border-accent' : ''}`}
                 >
-                  <Scissors className="w-4 h-4" />
-                  {showEditingPanel ? 'Close Editor' : 'Edit Segment'}
+                  <MessageSquare className="w-4 h-4" />
+                  {showAnnotations ? 'Close Annotations' : 'Annotate'}
+                  {comments.length > 0 && (
+                    <span className="ml-1 text-xs bg-accent text-white px-1.5 py-0.5 rounded-full">
+                      {comments.length}
+                    </span>
+                  )}
                 </button>
                 <div className="flex-1" />
                 <button
@@ -315,22 +584,6 @@ export function VideoPanel() {
                   Upload to YouTube
                 </button>
               </div>
-
-              {/* Editing Panel */}
-              {showEditingPanel && currentVideo && (
-                <div className="mt-4">
-                  <EditingPanel
-                    video={currentVideo as Video}
-                    currentTime={currentTime}
-                    onSeek={handleSeekTo}
-                    onExtend={handleExtend}
-                    onRemix={handleRemix}
-                    onTrim={handleTrim}
-                    onClose={() => setShowEditingPanel(false)}
-                    isProcessing={isEditProcessing}
-                  />
-                </div>
-              )}
             </div>
           </div>
         ) : (
@@ -382,6 +635,56 @@ export function VideoPanel() {
         onClose={() => setShowYouTubeUpload(false)}
         video={currentVideo}
       />
+
+      {/* Regenerate with Feedback Dialog */}
+      {currentVideo && (
+        <RegenerateWithFeedbackDialog
+          isOpen={showRegenerateDialog}
+          onClose={() => setShowRegenerateDialog(false)}
+          video={currentVideo}
+          comments={comments}
+          onRegenerate={handleRegenerateWithPrompt}
+        />
+      )}
+
+      {/* Add to Movie Dialog */}
+      {showAddToMovieDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Film className="w-5 h-5" />
+                Add to Movie
+              </h2>
+              <button
+                onClick={() => setShowAddToMovieDialog(false)}
+                className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-foreground-secondary" />
+              </button>
+            </div>
+
+            <p className="text-sm text-foreground-secondary mb-4">
+              Select a movie to add this clip to:
+            </p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {movies.map((movie) => (
+                <button
+                  key={movie.id}
+                  onClick={() => handleAddToMovie(movie.id)}
+                  className="w-full p-3 text-left border border-[#3a3a3a] hover:bg-[#2a2a2a] rounded-lg transition-colors"
+                >
+                  <div className="font-medium text-foreground">{movie.title}</div>
+                  <div className="text-xs text-foreground-secondary mt-1">
+                    {movie.clips?.length || 0} clips
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

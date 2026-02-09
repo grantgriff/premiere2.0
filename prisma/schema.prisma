@@ -27,6 +27,7 @@ model User {
   conversations   Conversation[]
   characters      Character[]
   videos          Video[]
+  videoComments   VideoComment[]
   styleReferences StyleReference[]
   movies          Movie[]
 
@@ -90,10 +91,35 @@ model Video {
   completedAt        DateTime? @map("completed_at")
 
   // Relationships
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  comments     VideoComment[]
 
   @@map("videos")
+}
+
+// ===========================================
+// Video Comment Model (for video annotations)
+// ===========================================
+model VideoComment {
+  id                String   @id @default(uuid())
+  videoId           String   @map("video_id")
+  userId            String   @map("user_id")
+  timestamp         Decimal  @db.Decimal(10, 3) // seconds with millisecond precision
+  text              String
+  frameUrl          String?  @map("frame_url") // captured frame at this timestamp
+  boundingBoxX      Decimal? @map("bounding_box_x") @db.Decimal(5, 2) // percentage (0-100)
+  boundingBoxY      Decimal? @map("bounding_box_y") @db.Decimal(5, 2) // percentage (0-100)
+  boundingBoxWidth  Decimal? @map("bounding_box_width") @db.Decimal(5, 2) // percentage (0-100)
+  boundingBoxHeight Decimal? @map("bounding_box_height") @db.Decimal(5, 2) // percentage (0-100)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("video_comments")
 }
 
 // ===========================================
