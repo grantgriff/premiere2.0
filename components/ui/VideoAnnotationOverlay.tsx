@@ -21,7 +21,7 @@ export interface VideoComment {
 
 interface VideoAnnotationOverlayProps {
   videoId: string
-  videoRef: React.RefObject<HTMLVideoElement>
+  videoRef: React.RefObject<HTMLVideoElement | null>
   comments: VideoComment[]
   onAddComment: (comment: Omit<VideoComment, 'id' | 'createdAt'>) => void
   onDeleteComment: (commentId: string) => void
