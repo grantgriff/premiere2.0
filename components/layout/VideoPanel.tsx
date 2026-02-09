@@ -26,6 +26,8 @@ import { RegenerateWithFeedbackDialog } from '@/components/ui/RegenerateWithFeed
 import { FeedbackPanel } from '@/components/ui/FeedbackPanel'
 import { startGeneration, pollVideoStatus, VideoStatusResponse, createMessage } from '@/lib/api'
 import { generateId } from '@/lib/utils'
+import { extractBothFrames } from '@/lib/frameExtraction'
+import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
 
 export function VideoPanel() {
   const currentVideo = useAppStore((state) => state.currentVideo)
@@ -40,6 +42,8 @@ export function VideoPanel() {
   const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
   const user = useAppStore((state) => state.user)
   const movies = useAppStore((state) => state.movies)
+  const multiModelGenerations = useAppStore((state) => state.multiModelGenerations)
+  const setMultiModelMode = useAppStore((state) => state.setMultiModelMode)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -546,6 +550,12 @@ export function VideoPanel() {
       return
     }
 
+    if (!currentVideo.videoUrl) {
+      console.error('[VideoPanel] Video URL not available')
+      alert('Video URL not available. Please wait for generation to complete.')
+      return
+    }
+
     try {
       // Get the movie to find the next position
       const movie = movies.find(m => m.id === movieId)
@@ -557,6 +567,29 @@ export function VideoPanel() {
       const nextPosition = movie.clips?.length || 0
       console.log('[VideoPanel] Adding video to movie:', { movieId, videoId: currentVideo.id, position: nextPosition })
 
+      // Extract first and last frames
+      console.log('[VideoPanel] Extracting frames from video...')
+      let firstFrameUrl: string | null = null
+      let lastFrameUrl: string | null = null
+
+      try {
+        const { firstFrame, lastFrame } = await extractBothFrames(currentVideo.videoUrl)
+
+        // Upload frames to storage
+        const frameBasePath = `${user.id}/frames/${generateId()}`
+        const [firstUrl, lastUrl] = await Promise.all([
+          uploadToStorage(STORAGE_BUCKETS.IMAGES, `${frameBasePath}_first.jpg`, firstFrame),
+          uploadToStorage(STORAGE_BUCKETS.IMAGES, `${frameBasePath}_last.jpg`, lastFrame),
+        ])
+
+        firstFrameUrl = firstUrl
+        lastFrameUrl = lastUrl
+        console.log('[VideoPanel] Frames extracted and uploaded')
+      } catch (frameError) {
+        console.warn('[VideoPanel] Failed to extract frames, continuing without them:', frameError)
+        // Continue without frames - not critical
+      }
+
       // Add clip to movie
       const response = await fetch(`/api/movies/${movieId}/clips`, {
         method: 'POST',
@@ -564,6 +597,8 @@ export function VideoPanel() {
         body: JSON.stringify({
           videoId: currentVideo.id,
           position: nextPosition,
+          firstFrameUrl,
+          lastFrameUrl,
         }),
       })
 
@@ -633,6 +668,19 @@ export function VideoPanel() {
                 poster={currentVideo.thumbnailUrl || undefined}
                 playsInline
               />
+
+              {/* Back to Comparison Button */}
+              {multiModelGenerations.length > 0 && (
+                <div className="absolute top-4 left-4 z-20">
+                  <button
+                    onClick={() => setMultiModelMode(true)}
+                    className="flex items-center gap-2 text-foreground text-sm bg-background/80 hover:bg-background px-3 py-1.5 rounded-lg border border-border transition-colors"
+                  >
+                    <Film className="w-4 h-4" />
+                    <span>Back to Comparison</span>
+                  </button>
+                </div>
+              )}
 
               {/* Quality Badge */}
               <div className="absolute top-4 right-4 z-20">
