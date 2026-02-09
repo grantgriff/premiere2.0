@@ -104,7 +104,16 @@ export function MovieTimeline() {
   const handleClickClip = (clip: NonNullable<typeof activeMovie>['clips'][0]) => {
     // Set this video as the current video in the main player
     if (clip.video) {
-      setCurrentVideo(clip.video)
+      // Convert partial video data to full Video type
+      setCurrentVideo({
+        ...clip.video,
+        status: 'completed' as const,
+        qualityScore: null,
+        qualityReport: null,
+        isVerifying: false,
+        createdAt: new Date(),
+        completedAt: new Date(),
+      })
     }
   }
 
