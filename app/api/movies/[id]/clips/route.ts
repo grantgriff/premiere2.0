@@ -24,20 +24,29 @@ export async function POST(
     console.log('[Movie Clips API] Verifying movie exists:', movieId)
     const { data: movie, error: movieError } = await supabase
       .from('movies')
-      .select('id')
+      .select('id, title, user_id')
       .eq('id', movieId)
-      .single()
+      .maybeSingle()
 
-    if (movieError || !movie) {
-      console.error('[Movie Clips API] Movie not found:', movieId, 'Error:', movieError)
+    if (movieError) {
+      console.error('[Movie Clips API] Database error checking movie:', movieId, 'Error:', movieError)
       console.error('[Movie Clips API] Error code:', movieError?.code, 'Message:', movieError?.message)
+      return NextResponse.json(
+        { error: `Database error: ${movieError.message}` },
+        { status: 500 }
+      )
+    }
+
+    if (!movie) {
+      console.error('[Movie Clips API] Movie not found:', movieId)
+      console.error('[Movie Clips API] Movie does not exist in database')
       return NextResponse.json(
         { error: `Movie not found: ${movieId}` },
         { status: 404 }
       )
     }
 
-    console.log('[Movie Clips API] Movie verified, adding clip')
+    console.log('[Movie Clips API] Movie verified:', movie.title, 'User:', movie.user_id)
 
     // Insert the clip
     const { data: clip, error } = await supabase
