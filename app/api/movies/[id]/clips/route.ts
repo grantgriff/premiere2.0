@@ -20,33 +20,67 @@ export async function POST(
 
     const supabase = getSupabaseAdmin()
 
-    // Verify movie exists first
-    console.log('[Movie Clips API] Verifying movie exists:', movieId)
-    const { data: movie, error: movieError } = await supabase
-      .from('movies')
-      .select('id, title, user_id')
-      .eq('id', movieId)
-      .maybeSingle()
+    // Verify movie exists with retry logic for newly created movies (database replication lag)
+    let movie = null
+    let movieError = null
+    const maxRetries = 5
+    const retryDelays = [500, 1000, 2000, 3000, 5000] // Server-side retries
 
-    if (movieError) {
-      console.error('[Movie Clips API] Database error checking movie:', movieId, 'Error:', movieError)
-      console.error('[Movie Clips API] Error code:', movieError?.code, 'Message:', movieError?.message)
-      return NextResponse.json(
-        { error: `Database error: ${movieError.message}` },
-        { status: 500 }
-      )
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delay = retryDelays[attempt - 1]
+        console.log(`[Movie Clips API] Movie not found, waiting ${delay}ms before retry ${attempt}/${maxRetries}...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+
+      console.log(`[Movie Clips API] Verifying movie exists (attempt ${attempt + 1}/${maxRetries + 1}):`, movieId)
+      const result = await supabase
+        .from('movies')
+        .select('id, title, user_id')
+        .eq('id', movieId)
+        .maybeSingle()
+
+      movie = result.data
+      movieError = result.error
+
+      if (movieError) {
+        console.error('[Movie Clips API] Database error checking movie:', movieId, 'Error:', movieError)
+        console.error('[Movie Clips API] Error code:', movieError?.code, 'Message:', movieError?.message)
+        return NextResponse.json(
+          { error: `Database error: ${movieError.message}` },
+          { status: 500 }
+        )
+      }
+
+      if (movie) {
+        console.log(`[Movie Clips API] Movie found on attempt ${attempt + 1}:`, movie.title, 'User:', movie.user_id)
+        break
+      }
     }
 
     if (!movie) {
-      console.error('[Movie Clips API] Movie not found:', movieId)
-      console.error('[Movie Clips API] Movie does not exist in database')
+      console.error('[Movie Clips API] Movie not found after', maxRetries + 1, 'attempts:', movieId)
+
+      // Debug: Show what movies DO exist in the database
+      const { data: allMovies } = await supabase
+        .from('movies')
+        .select('id, title, created_at')
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      console.error('[Movie Clips API] Recent movies in database:', allMovies?.map(m => ({
+        id: m.id,
+        title: m.title,
+        created: new Date(m.created_at).toISOString()
+      })))
+      console.error('[Movie Clips API] Looking for movie ID:', movieId)
+      console.error('[Movie Clips API] Movie does not exist in database - may be an invalid ID or replication lag > 12s')
+
       return NextResponse.json(
         { error: `Movie not found: ${movieId}` },
         { status: 404 }
       )
     }
-
-    console.log('[Movie Clips API] Movie verified:', movie.title, 'User:', movie.user_id)
 
     // Insert the clip
     const { data: clip, error } = await supabase
