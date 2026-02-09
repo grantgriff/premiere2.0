@@ -473,10 +473,9 @@ export function VideoPanel() {
           console.log('[VideoPanel] Updated comments state:', updated)
           return updated
         })
-        // Show feedback panel when first comment is added
-        if (comments.length === 0) {
-          setShowFeedbackPanel(true)
-        }
+        // Show feedback panel when comment is added
+        setShowFeedbackPanel(true)
+        setShowAnnotations(true)
       } else {
         console.error('[VideoPanel] Failed to add comment:', response.status)
       }
@@ -844,19 +843,18 @@ export function VideoPanel() {
                 ) : null}
               </div>
 
-              {/* Annotation Overlay */}
-              {showAnnotations && (
-                <VideoAnnotationOverlay
-                  videoId={currentVideo.id}
-                  videoRef={videoRef}
-                  comments={comments}
-                  onAddComment={handleAddComment}
-                  onDeleteComment={handleDeleteComment}
-                  currentTime={currentTime}
-                  isPlaying={isPlaying}
-                  onPause={pauseVideo}
-                />
-              )}
+              {/* Annotation Overlay - Always show comments, but only allow editing when active */}
+              <VideoAnnotationOverlay
+                videoId={currentVideo.id}
+                videoRef={videoRef}
+                comments={comments}
+                onAddComment={handleAddComment}
+                onDeleteComment={handleDeleteComment}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
+                onPause={pauseVideo}
+                isActive={showAnnotations}
+              />
 
               {/* Play/Pause Overlay */}
               {!showAnnotations && (
@@ -961,12 +959,13 @@ export function VideoPanel() {
                   onClick={() => {
                     const newState = !showAnnotations
                     setShowAnnotations(newState)
-                    setShowFeedbackPanel(newState)
+                    // Always show feedback panel if there are comments
+                    setShowFeedbackPanel(newState || comments.length > 0)
                   }}
                   className={`btn-secondary flex items-center gap-2 ${showAnnotations ? 'bg-accent/20 border-accent' : ''}`}
                 >
                   <MessageSquare className="w-4 h-4" />
-                  {showAnnotations ? 'Close Feedback' : 'Feedback'}
+                  {showAnnotations ? 'Stop Annotating' : 'Add Feedback'}
                   {comments.length > 0 && (
                     <span className="ml-1 text-xs bg-accent text-white px-1.5 py-0.5 rounded-full">
                       {comments.length}
