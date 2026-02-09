@@ -1,7 +1,7 @@
 -- Create video_comments table
 CREATE TABLE video_comments (
-  id TEXT PRIMARY KEY,
-  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   timestamp DECIMAL(10, 3) NOT NULL, -- seconds with millisecond precision
   text TEXT NOT NULL,
