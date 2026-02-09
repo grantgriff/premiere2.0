@@ -405,14 +405,21 @@ export function VideoPanel() {
 
   // Handle add to movie
   const handleAddToMovie = async (movieId: string) => {
-    if (!currentVideo || !user) return
+    if (!currentVideo || !user) {
+      console.error('[VideoPanel] Missing required data:', { currentVideo: !!currentVideo, user: !!user })
+      return
+    }
 
     try {
       // Get the movie to find the next position
       const movie = movies.find(m => m.id === movieId)
-      if (!movie) return
+      if (!movie) {
+        console.error('[VideoPanel] Movie not found:', movieId)
+        return
+      }
 
       const nextPosition = movie.clips?.length || 0
+      console.log('[VideoPanel] Adding video to movie:', { movieId, videoId: currentVideo.id, position: nextPosition })
 
       // Add clip to movie
       const response = await fetch(`/api/movies/${movieId}/clips`, {
@@ -424,18 +431,31 @@ export function VideoPanel() {
         }),
       })
 
-      if (response.ok) {
-        // Reload movies to get updated data
-        const moviesResponse = await fetch(`/api/movies?userId=${user.id}`)
-        if (moviesResponse.ok) {
-          const data = await moviesResponse.json()
-          useAppStore.getState().setMovies(data.movies)
-        }
-
-        setShowAddToMovieDialog(false)
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.error('[VideoPanel] Failed to add clip:', errorData)
+        alert(`Failed to add clip to movie: ${errorData.error}`)
+        return
       }
+
+      console.log('[VideoPanel] Clip added successfully')
+
+      // Reload movies to get updated data
+      const moviesResponse = await fetch(`/api/movies?userId=${user.id}`)
+      if (moviesResponse.ok) {
+        const data = await moviesResponse.json()
+        useAppStore.getState().setMovies(data.movies)
+        console.log('[VideoPanel] Movies reloaded, setting active movie to:', movieId)
+
+        // Set this movie as active so timeline shows
+        useAppStore.getState().setActiveMovie(movieId)
+      }
+
+      setShowAddToMovieDialog(false)
+      alert('Clip added to movie successfully!')
     } catch (error) {
-      console.error('Failed to add to movie:', error)
+      console.error('[VideoPanel] Exception adding to movie:', error)
+      alert(`Error adding clip to movie: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
