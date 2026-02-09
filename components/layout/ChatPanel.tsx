@@ -94,6 +94,13 @@ export function ChatPanel() {
 
   const activeConversation = useActiveConversation()
 
+  // Initialize selectedModels with default model if empty
+  useEffect(() => {
+    if (selectedModels.length === 0 && selectedModel) {
+      toggleModelSelection(selectedModel)
+    }
+  }, [])
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -594,28 +601,38 @@ export function ChatPanel() {
       <div className="px-4 py-3 border-t border-border">
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs text-foreground-secondary">Model</label>
-          <button
-            onClick={() => setMultiModelMode(!multiModelMode)}
-            className="text-xs text-accent hover:underline"
-            disabled={isGenerating}
-          >
-            {multiModelMode ? 'Single Model' : 'Multi-Model'}
-          </button>
+          {selectedModels.length > 1 && (
+            <span className="text-xs text-accent">
+              Multi-Model ({selectedModels.length} selected)
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {MODELS.map((model) => {
-            const isSelected = multiModelMode
-              ? selectedModels.includes(model.id)
-              : selectedModel === model.id
+            const isSelected = selectedModels.includes(model.id)
             return (
               <button
                 key={model.id}
                 onClick={() => {
                   if (model.disabled) return
-                  if (multiModelMode) {
-                    toggleModelSelection(model.id)
-                  } else {
-                    setSelectedModel(model.id)
+
+                  // Calculate what the new selection would be
+                  const newSelectedModels = selectedModels.includes(model.id)
+                    ? selectedModels.filter((m) => m !== model.id)
+                    : [...selectedModels, model.id]
+
+                  // Don't allow deselecting the last model
+                  if (newSelectedModels.length === 0) return
+
+                  // Toggle the model selection
+                  toggleModelSelection(model.id)
+
+                  // Automatically enable/disable multi-model mode based on selection count
+                  setMultiModelMode(newSelectedModels.length > 1)
+
+                  // Update selectedModel for single-model mode
+                  if (newSelectedModels.length === 1) {
+                    setSelectedModel(newSelectedModels[0])
                   }
                 }}
                 className={`model-chip text-xs ${isSelected ? 'model-chip-active' : ''} ${model.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
@@ -628,9 +645,19 @@ export function ChatPanel() {
             )
           })}
         </div>
-        {multiModelMode && (
+        {selectedModels.length === 0 && (
           <p className="text-xs text-foreground-secondary mt-2">
-            Select 2-4 models to compare ({selectedModels.length} selected)
+            Select 1 model for single generation or 2-4 models to compare
+          </p>
+        )}
+        {selectedModels.length === 1 && (
+          <p className="text-xs text-foreground-secondary mt-2">
+            Click another model to enable multi-model comparison
+          </p>
+        )}
+        {selectedModels.length > 4 && (
+          <p className="text-xs text-red-400 mt-2">
+            Maximum 4 models for comparison
           </p>
         )}
       </div>
