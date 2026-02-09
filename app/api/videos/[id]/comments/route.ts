@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { getCurrentUserServer } from '@/lib/auth'
+import { getCurrentUserServer } from '@/lib/auth-server'
 
 /**
  * GET /api/videos/[id]/comments - Get all comments for a video
