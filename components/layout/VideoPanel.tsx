@@ -53,6 +53,8 @@ export function VideoPanel() {
   const [showAddToMovieDialog, setShowAddToMovieDialog] = useState(false)
   const [showFeedbackPanel, setShowFeedbackPanel] = useState(false)
   const [isRefining, setIsRefining] = useState(false)
+  const [newMovieTitle, setNewMovieTitle] = useState('')
+  const [isCreatingMovie, setIsCreatingMovie] = useState(false)
   const videoContainerRef = useRef<HTMLDivElement>(null)
 
   // Handle video time updates
@@ -479,6 +481,45 @@ export function VideoPanel() {
     }
   }
 
+  // Handle create new movie and add clip
+  const handleCreateMovieAndAddClip = async () => {
+    if (!currentVideo || !user || !newMovieTitle.trim()) {
+      return
+    }
+
+    setIsCreatingMovie(true)
+    try {
+      // Create the movie
+      const createResponse = await fetch('/api/movies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          title: newMovieTitle.trim(),
+          description: '',
+        }),
+      })
+
+      if (!createResponse.ok) {
+        const errorData = await createResponse.json().catch(() => ({ error: 'Unknown error' }))
+        alert(`Failed to create movie: ${errorData.error}`)
+        return
+      }
+
+      const { movie: newMovie } = await createResponse.json()
+      console.log('[VideoPanel] Created new movie:', newMovie.id)
+
+      // Add clip to the new movie
+      await handleAddToMovie(newMovie.id)
+      setNewMovieTitle('')
+    } catch (error) {
+      console.error('[VideoPanel] Exception creating movie:', error)
+      alert(`Error creating movie: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsCreatingMovie(false)
+    }
+  }
+
   // Handle add to movie
   const handleAddToMovie = async (movieId: string) => {
     if (!currentVideo || !user) {
@@ -821,24 +862,48 @@ export function VideoPanel() {
               </button>
             </div>
 
-            <p className="text-sm text-foreground-secondary mb-4">
-              Select a movie to add this clip to:
-            </p>
-
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {movies.map((movie) => (
+            {/* Create New Movie Section */}
+            <div className="mb-6">
+              <p className="text-sm font-medium text-foreground mb-2">Create New Movie</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Movie title..."
+                  value={newMovieTitle}
+                  onChange={(e) => setNewMovieTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateMovieAndAddClip()}
+                  className="flex-1 px-3 py-2 bg-[#0a0a0a] border border-[#3a3a3a] rounded-lg text-sm text-foreground placeholder:text-foreground-secondary focus:outline-none focus:border-accent"
+                />
                 <button
-                  key={movie.id}
-                  onClick={() => handleAddToMovie(movie.id)}
-                  className="w-full p-3 text-left border border-[#3a3a3a] hover:bg-[#2a2a2a] rounded-lg transition-colors"
+                  onClick={handleCreateMovieAndAddClip}
+                  disabled={!newMovieTitle.trim() || isCreatingMovie}
+                  className="px-4 py-2 bg-accent hover:bg-accent/90 disabled:bg-accent/50 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
                 >
-                  <div className="font-medium text-foreground">{movie.title}</div>
-                  <div className="text-xs text-foreground-secondary mt-1">
-                    {movie.clips?.length || 0} clips
-                  </div>
+                  {isCreatingMovie ? 'Creating...' : 'Create'}
                 </button>
-              ))}
+              </div>
             </div>
+
+            {/* Existing Movies Section */}
+            {movies.length > 0 && (
+              <>
+                <p className="text-sm font-medium text-foreground mb-2">Or Add to Existing</p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {movies.map((movie) => (
+                    <button
+                      key={movie.id}
+                      onClick={() => handleAddToMovie(movie.id)}
+                      className="w-full p-3 text-left border border-[#3a3a3a] hover:bg-[#2a2a2a] rounded-lg transition-colors"
+                    >
+                      <div className="font-medium text-foreground">{movie.title}</div>
+                      <div className="text-xs text-foreground-secondary mt-1">
+                        {movie.clips?.length || 0} clips
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
