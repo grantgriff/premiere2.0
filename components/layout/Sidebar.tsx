@@ -65,6 +65,7 @@ export function Sidebar() {
   const setActiveConversation = useAppStore((state) => state.setActiveConversation)
   const deleteConversation = useAppStore((state) => state.deleteConversation)
   const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
+  const setMultiModelMode = useAppStore((state) => state.setMultiModelMode)
 
   // Global state - Movies
   const movies = useAppStore((state) => state.movies)
