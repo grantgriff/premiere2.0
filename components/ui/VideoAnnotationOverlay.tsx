@@ -179,10 +179,11 @@ export function VideoAnnotationOverlay({
   return (
     <div
       ref={overlayRef}
-      className="absolute inset-0 z-30 cursor-crosshair"
+      className="absolute inset-0 z-50 cursor-crosshair overflow-visible"
       onClick={!isCreating ? handleOverlayClick : undefined}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
+      style={{ pointerEvents: 'auto' }}
     >
       {/* Existing Comments */}
       {comments.map((comment) => (
@@ -263,7 +264,7 @@ export function VideoAnnotationOverlay({
           )}
 
           {/* Comment Input Card */}
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 w-80 bg-black/95 border border-[#3a3a3a] rounded-lg shadow-2xl p-4">
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 bg-black/95 border border-[#3a3a3a] rounded-lg shadow-2xl p-4 z-[100]">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-foreground-secondary">
                 @ {formatTime(currentTime)}

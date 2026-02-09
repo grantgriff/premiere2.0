@@ -183,18 +183,6 @@ export function ChatPanel() {
     // Save user message to database
     createMessageApi(convId, 'user', prompt)
 
-    // Add assistant "generating" message
-    const generatingMessage = {
-      id: generateId(),
-      role: 'assistant' as const,
-      content: `Generating ${selectedDuration}s video with ${MODELS.find(m => m.id === selectedModel)?.name}...`,
-      timestamp: new Date(),
-    }
-    addMessage(convId, generatingMessage)
-
-    // Save generating message to database
-    createMessageApi(convId, 'assistant', generatingMessage.content)
-
     try {
       // Upload files to storage first
       const uploadedUrls: StyleReference[] = []
@@ -266,15 +254,6 @@ export function ChatPanel() {
         )
 
         setIsGenerating(false)
-        const modelNames = selectedModels.map(m => MODELS.find(model => model.id === m)?.name).join(', ')
-        const completionMsg = `Multi-model generation complete! Generated with: ${modelNames}`
-        addMessage(convId, {
-          id: generateId(),
-          role: 'assistant' as const,
-          content: completionMsg,
-          timestamp: new Date(),
-        })
-        createMessageApi(convId, 'assistant', completionMsg)
 
         // Clear uploaded files after successful submission
         setUploadedFiles([])
@@ -283,6 +262,18 @@ export function ChatPanel() {
       }
 
       // Single model generation
+      // Add assistant "generating" message for single-model
+      const generatingMessage = {
+        id: generateId(),
+        role: 'assistant' as const,
+        content: `Generating ${selectedDuration}s video with ${MODELS.find(m => m.id === selectedModel)?.name}...`,
+        timestamp: new Date(),
+      }
+      addMessage(convId, generatingMessage)
+
+      // Save generating message to database
+      createMessageApi(convId, 'assistant', generatingMessage.content)
+
       // Start generation with all references
       // Note: userId is now extracted from session cookie on the server
       const response = await startGeneration({
@@ -573,7 +564,13 @@ export function ChatPanel() {
           ))
         )}
 
-        {isGenerating && (
+        {isGenerating && multiModelMode && (
+          <div className="text-center py-4">
+            <p className="text-sm text-foreground-secondary italic">Generating...</p>
+          </div>
+        )}
+
+        {isGenerating && !multiModelMode && (
           <div className="message-assistant">
             <div className="flex items-center gap-2 mb-2">
               <Loader2 className="w-4 h-4 animate-spin" />
