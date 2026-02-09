@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { MessageSquare, X, Check, Square } from 'lucide-react'
+import { MessageSquare, X, Check, Square, MapPin } from 'lucide-react'
 
 export interface VideoComment {
   id: string
@@ -206,12 +206,20 @@ export function VideoAnnotationOverlay({
             />
           )}
 
-          {/* Comment Marker */}
+          {/* Comment Marker - Sleek teardrop pin, always visible */}
           <div
-            className="absolute -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 transition-transform group"
+            className="absolute -translate-x-1/2 -translate-y-full cursor-pointer hover:scale-110 transition-transform group"
+            style={{ top: 0, left: 0 }}
             title={`${formatTime(comment.timestamp)}: ${comment.text}`}
           >
-            <MessageSquare className="w-4 h-4 text-black" />
+            {/* Teardrop pin design */}
+            <div className="relative">
+              <MapPin className="w-8 h-8 text-yellow-400 drop-shadow-[0_2px_8px_rgba(250,204,21,0.5)] fill-yellow-400/90 stroke-yellow-600 stroke-[1.5]" />
+              {/* Pulse effect to make it more visible */}
+              <div className="absolute inset-0 -z-10">
+                <MapPin className="w-8 h-8 text-yellow-400/40 animate-ping" style={{ animationDuration: '2s' }} />
+              </div>
+            </div>
 
             {/* Comment Tooltip on Hover */}
             <div className="absolute top-10 left-1/2 -translate-x-1/2 w-64 bg-black/90 text-white text-xs p-3 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">

@@ -169,10 +169,8 @@ export function VideoPanel() {
 
       if (response.ok) {
         const data = await response.json()
-        // Get first frame if available
-        const firstFrameUrl = comments.length > 0 ? comments[0].frameUrl : undefined
-        // Regenerate with refined prompt
-        await handleRegenerateWithPrompt(data.refinedPrompt, firstFrameUrl)
+        // Regenerate with refined prompt (context will be determined in handleRegenerateWithPrompt)
+        await handleRegenerateWithPrompt(data.refinedPrompt)
       }
     } catch (error) {
       console.error('Failed to refine prompt:', error)
@@ -192,16 +190,63 @@ export function VideoPanel() {
     setGenerationProgress(0)
 
     try {
-      // Build style references from reference frame if provided
-      const styleReferences = referenceFrameUrl
-        ? [
-            {
-              type: 'upload' as const,
-              url: referenceFrameUrl,
-              title: 'Reference Frame',
-            },
-          ]
-        : []
+      // Determine context to send based on video position in timeline
+      let contextType: 'characters' | 'previous_frame' | 'reference_frame' | 'none' = 'none'
+      let characterIds: string[] | undefined
+      let firstFrameUrl: string | undefined
+      const styleReferences: Array<{ type: 'upload'; url: string; title: string }> = []
+
+      // Check if this video is part of a movie/timeline
+      const videoInMovie = movies.find(movie =>
+        movie.clips.some(clip => clip.videoId === currentVideo.id)
+      )
+
+      if (videoInMovie) {
+        // Find this video's clip
+        const currentClipIndex = videoInMovie.clips.findIndex(
+          clip => clip.videoId === currentVideo.id
+        )
+
+        if (currentClipIndex > 0) {
+          // This is a continuation video - use previous clip's last frame
+          const previousClip = videoInMovie.clips[currentClipIndex - 1]
+          if (previousClip.lastFrameUrl) {
+            firstFrameUrl = previousClip.lastFrameUrl
+            contextType = 'previous_frame'
+            console.log('[Regenerate] Using previous clip last frame for timeline continuation')
+          }
+        } else if (currentClipIndex === 0) {
+          // First video in timeline - use characters from conversation
+          const conversation = useAppStore.getState().conversations.find(c => c.id === activeConversationId)
+          const characters = useAppStore.getState().characters
+          // Get character references from conversation context (this is simplified - you may need more logic)
+          if (characters.length > 0 && characters[0].embeddingStatus === 'ready') {
+            characterIds = characters.map(c => c.id)
+            contextType = 'characters'
+            console.log('[Regenerate] Using character references for first video in timeline')
+          }
+        }
+      } else {
+        // Not in a movie - this is a standalone video, use characters from conversation
+        const characters = useAppStore.getState().characters
+        if (characters.length > 0 && characters[0].embeddingStatus === 'ready') {
+          characterIds = characters.map(c => c.id)
+          contextType = 'characters'
+          console.log('[Regenerate] Using character references for standalone video')
+        }
+      }
+
+      // If a reference frame was explicitly provided (from comment), use it as style reference
+      if (referenceFrameUrl && contextType !== 'previous_frame') {
+        styleReferences.push({
+          type: 'upload' as const,
+          url: referenceFrameUrl,
+          title: 'Reference Frame',
+        })
+        contextType = 'reference_frame'
+      }
+
+      console.log('[Regenerate] Context:', { contextType, characterIds, firstFrameUrl, styleReferences })
 
       // Add assistant message about regeneration
       const regeneratingMessage = {
@@ -213,13 +258,15 @@ export function VideoPanel() {
       addMessage(activeConversationId, regeneratingMessage)
       createMessage(activeConversationId, 'assistant', regeneratingMessage.content)
 
-      // Start generation with refined prompt
+      // Start generation with refined prompt and appropriate context
       const response = await startGeneration({
         prompt: refinedPrompt,
         model: currentVideo.model,
         duration: currentVideo.duration,
         conversationId: activeConversationId,
-        styleReferences,
+        characterIds,
+        firstFrameUrl,
+        styleReferences: styleReferences.length > 0 ? styleReferences : undefined,
       })
 
       if (!response.success || !response.videoId) {
