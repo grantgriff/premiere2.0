@@ -47,6 +47,7 @@ export function VideoPanel() {
   const activeMovieId = useAppStore((state) => state.activeMovieId)
   const setActiveMovie = useAppStore((state) => state.setActiveMovie)
   const updateMovie = useAppStore((state) => state.updateMovie)
+  const setMovies = useAppStore((state) => state.setMovies)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -578,12 +579,47 @@ export function VideoPanel() {
   // Get active movie
   const activeMovie = movies.find(m => m.id === activeMovieId)
 
-  // Initialize editing title when dialog opens
+  // Reload movies and initialize editing title when dialog opens
   useEffect(() => {
-    if (showAddToMovieDialog && activeMovie) {
-      setEditingMovieTitle(activeMovie.title)
+    if (showAddToMovieDialog) {
+      // Reload movies to ensure we have fresh data
+      loadMoviesFromAPI()
+
+      if (activeMovie) {
+        setEditingMovieTitle(activeMovie.title)
+      }
     }
-  }, [showAddToMovieDialog, activeMovie])
+  }, [showAddToMovieDialog])
+
+  // Load movies from API
+  const loadMoviesFromAPI = async () => {
+    if (!user) return
+
+    try {
+      console.log('[VideoPanel] Reloading movies from API')
+      const response = await fetch(`/api/movies?userId=${user.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        const moviesData = data.movies.map((m: any) => ({
+          ...m,
+          createdAt: new Date(m.createdAt),
+          updatedAt: new Date(m.updatedAt),
+          clips: (m.clips || []).map((c: any) => ({
+            ...c,
+            createdAt: new Date(c.createdAt),
+          }))
+        }))
+        setMovies(moviesData)
+        console.log('[VideoPanel] Loaded', moviesData.length, 'movies:', moviesData.map((m: any) => ({ id: m.id, title: m.title })))
+      } else {
+        console.error('[VideoPanel] Failed to load movies:', response.status)
+        const errorData = await response.json().catch(() => ({}))
+        console.error('[VideoPanel] Error details:', errorData)
+      }
+    } catch (error) {
+      console.error('[VideoPanel] Exception loading movies:', error)
+    }
+  }
 
   // Handle updating movie title
   const handleUpdateMovieTitle = async () => {
@@ -626,9 +662,12 @@ export function VideoPanel() {
       // Get the movie to find the next position
       const movie = movies.find(m => m.id === movieId)
       if (!movie) {
-        console.error('[VideoPanel] Movie not found:', movieId)
+        console.error('[VideoPanel] Movie not found in local state:', movieId)
+        console.error('[VideoPanel] Available movies:', movies.map(m => ({ id: m.id, title: m.title })))
+        alert(`Movie not found. This may be due to stale data. Please refresh the page and try again.`)
         return
       }
+      console.log('[VideoPanel] Movie found:', movie.title, 'ID:', movie.id)
 
       const nextPosition = movie.clips?.length || 0
       console.log('[VideoPanel] Adding video to movie:', { movieId, videoId: currentVideo.id, position: nextPosition })
