@@ -14,6 +14,7 @@ import {
   Shield,
   Youtube,
   Share2,
+  MessageSquare,
 } from 'lucide-react'
 import { useAppStore, Video } from '@/lib/store'
 import { QualityBadge } from '@/components/ui/QualityBadge'
@@ -21,6 +22,7 @@ import { QualityReport } from '@/lib/models/types'
 import { YouTubeUploadPanel } from '@/components/ui/YouTubeUploadPanel'
 import { EditingPanel } from '@/components/ui/EditingPanel'
 import { Segment } from '@/components/ui/VideoTimeline'
+import { VideoAnnotationOverlay, VideoComment } from '@/components/ui/VideoAnnotationOverlay'
 
 export function VideoPanel() {
   const currentVideo = useAppStore((state) => state.currentVideo)
@@ -35,6 +37,8 @@ export function VideoPanel() {
   const [showYouTubeUpload, setShowYouTubeUpload] = useState(false)
   const [showEditingPanel, setShowEditingPanel] = useState(false)
   const [isEditProcessing, setIsEditProcessing] = useState(false)
+  const [comments, setComments] = useState<VideoComment[]>([])
+  const [showAnnotations, setShowAnnotations] = useState(false)
 
   // Handle video time updates
   useEffect(() => {
@@ -163,6 +167,74 @@ export function VideoPanel() {
     alert(`Regenerate functionality coming soon!\nPrompt: ${currentVideo.prompt}`)
   }
 
+  // Load comments when video changes
+  useEffect(() => {
+    if (!currentVideo?.id) {
+      setComments([])
+      return
+    }
+
+    // Fetch comments for this video
+    const fetchComments = async () => {
+      try {
+        const response = await fetch(`/api/videos/${currentVideo.id}/comments`)
+        if (response.ok) {
+          const data = await response.json()
+          setComments(data.comments || [])
+        }
+      } catch (error) {
+        console.error('Failed to load comments:', error)
+      }
+    }
+
+    fetchComments()
+  }, [currentVideo?.id])
+
+  // Add comment
+  const handleAddComment = async (comment: Omit<VideoComment, 'id' | 'createdAt'>) => {
+    if (!currentVideo) return
+
+    try {
+      const response = await fetch(`/api/videos/${currentVideo.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(comment),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setComments((prev) => [...prev, data.comment])
+      }
+    } catch (error) {
+      console.error('Failed to add comment:', error)
+    }
+  }
+
+  // Delete comment
+  const handleDeleteComment = async (commentId: string) => {
+    if (!currentVideo) return
+
+    try {
+      const response = await fetch(`/api/videos/${currentVideo.id}/comments/${commentId}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setComments((prev) => prev.filter((c) => c.id !== commentId))
+      }
+    } catch (error) {
+      console.error('Failed to delete comment:', error)
+    }
+  }
+
+  // Pause video
+  const pauseVideo = () => {
+    if (videoRef.current && isPlaying) {
+      videoRef.current.pause()
+      setIsPlaying(false)
+    }
+  }
+
   return (
     <main className="flex-1 min-w-[600px] flex flex-col bg-background border-r border-border">
       {/* Video Viewport */}
@@ -216,17 +288,33 @@ export function VideoPanel() {
                 ) : null}
               </div>
 
+              {/* Annotation Overlay */}
+              {showAnnotations && (
+                <VideoAnnotationOverlay
+                  videoId={currentVideo.id}
+                  videoRef={videoRef}
+                  comments={comments}
+                  onAddComment={handleAddComment}
+                  onDeleteComment={handleDeleteComment}
+                  currentTime={currentTime}
+                  isPlaying={isPlaying}
+                  onPause={pauseVideo}
+                />
+              )}
+
               {/* Play/Pause Overlay */}
-              <button
-                onClick={togglePlay}
-                className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity"
-              >
-                {isPlaying ? (
-                  <Pause className="w-16 h-16 text-white" />
-                ) : (
-                  <Play className="w-16 h-16 text-white" />
-                )}
-              </button>
+              {!showAnnotations && (
+                <button
+                  onClick={togglePlay}
+                  className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity"
+                >
+                  {isPlaying ? (
+                    <Pause className="w-16 h-16 text-white" />
+                  ) : (
+                    <Play className="w-16 h-16 text-white" />
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Playback Controls */}
@@ -305,6 +393,18 @@ export function VideoPanel() {
                 >
                   <Scissors className="w-4 h-4" />
                   {showEditingPanel ? 'Close Editor' : 'Edit Segment'}
+                </button>
+                <button
+                  onClick={() => setShowAnnotations(!showAnnotations)}
+                  className={`btn-secondary flex items-center gap-2 ${showAnnotations ? 'bg-accent/20 border-accent' : ''}`}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  {showAnnotations ? 'Close Annotations' : 'Annotate'}
+                  {comments.length > 0 && (
+                    <span className="ml-1 text-xs bg-accent text-white px-1.5 py-0.5 rounded-full">
+                      {comments.length}
+                    </span>
+                  )}
                 </button>
                 <div className="flex-1" />
                 <button
