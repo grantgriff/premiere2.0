@@ -23,6 +23,7 @@ import { YouTubeUploadPanel } from '@/components/ui/YouTubeUploadPanel'
 import { EditingPanel } from '@/components/ui/EditingPanel'
 import { Segment } from '@/components/ui/VideoTimeline'
 import { VideoAnnotationOverlay, VideoComment } from '@/components/ui/VideoAnnotationOverlay'
+import { RegenerateWithFeedbackDialog } from '@/components/ui/RegenerateWithFeedbackDialog'
 
 export function VideoPanel() {
   const currentVideo = useAppStore((state) => state.currentVideo)
@@ -39,6 +40,7 @@ export function VideoPanel() {
   const [isEditProcessing, setIsEditProcessing] = useState(false)
   const [comments, setComments] = useState<VideoComment[]>([])
   const [showAnnotations, setShowAnnotations] = useState(false)
+  const [showRegenerateDialog, setShowRegenerateDialog] = useState(false)
 
   // Handle video time updates
   useEffect(() => {
@@ -160,11 +162,26 @@ export function VideoPanel() {
     }
   }
 
-  // Handle regenerate
+  // Handle regenerate - open dialog if comments exist
   const handleRegenerate = () => {
     if (!currentVideo) return
-    // TODO: Trigger regeneration with same prompt
-    alert(`Regenerate functionality coming soon!\nPrompt: ${currentVideo.prompt}`)
+
+    if (comments.length > 0) {
+      // Open regenerate dialog with feedback
+      setShowRegenerateDialog(true)
+    } else {
+      // Simple regenerate without feedback
+      // TODO: Implement simple regeneration
+      alert(`Regenerate functionality coming soon!\nPrompt: ${currentVideo.prompt}`)
+    }
+  }
+
+  // Handle regenerate with refined prompt
+  const handleRegenerateWithPrompt = async (refinedPrompt: string, referenceFrameUrl?: string) => {
+    // TODO: Implement video generation with refined prompt and reference frame
+    console.log('Regenerating with refined prompt:', refinedPrompt)
+    console.log('Reference frame:', referenceFrameUrl)
+    alert(`Regeneration will start with refined prompt!\n\nPrompt: ${refinedPrompt}`)
   }
 
   // Load comments when video changes
@@ -385,7 +402,12 @@ export function VideoPanel() {
                   className="btn-secondary flex items-center gap-2"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  Regenerate
+                  {comments.length > 0 ? 'Regenerate with Feedback' : 'Regenerate'}
+                  {comments.length > 0 && (
+                    <span className="ml-1 text-xs bg-accent text-white px-1.5 py-0.5 rounded-full">
+                      {comments.length}
+                    </span>
+                  )}
                 </button>
                 <button
                   onClick={() => setShowEditingPanel(!showEditingPanel)}
@@ -482,6 +504,17 @@ export function VideoPanel() {
         onClose={() => setShowYouTubeUpload(false)}
         video={currentVideo}
       />
+
+      {/* Regenerate with Feedback Dialog */}
+      {currentVideo && (
+        <RegenerateWithFeedbackDialog
+          isOpen={showRegenerateDialog}
+          onClose={() => setShowRegenerateDialog(false)}
+          video={currentVideo}
+          comments={comments}
+          onRegenerate={handleRegenerateWithPrompt}
+        />
+      )}
     </main>
   )
 }
