@@ -23,6 +23,7 @@ import { QualityReport } from '@/lib/models/types'
 import { YouTubeUploadPanel } from '@/components/ui/YouTubeUploadPanel'
 import { VideoAnnotationOverlay, VideoComment } from '@/components/ui/VideoAnnotationOverlay'
 import { RegenerateWithFeedbackDialog } from '@/components/ui/RegenerateWithFeedbackDialog'
+import { FeedbackPanel } from '@/components/ui/FeedbackPanel'
 import { startGeneration, pollVideoStatus, VideoStatusResponse, createMessage } from '@/lib/api'
 import { generateId } from '@/lib/utils'
 
@@ -50,6 +51,8 @@ export function VideoPanel() {
   const [showAnnotations, setShowAnnotations] = useState(false)
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false)
   const [showAddToMovieDialog, setShowAddToMovieDialog] = useState(false)
+  const [showFeedbackPanel, setShowFeedbackPanel] = useState(false)
+  const [isRefining, setIsRefining] = useState(false)
   const videoContainerRef = useRef<HTMLDivElement>(null)
 
   // Handle video time updates
@@ -129,17 +132,52 @@ export function VideoPanel() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  // Handle regenerate - open dialog if comments exist
-  const handleRegenerate = () => {
-    if (!currentVideo) return
+  // Handle regenerate - simple version without feedback
+  const handleRegenerate = async () => {
+    if (!currentVideo || !activeConversationId || !user) return
 
-    if (comments.length > 0) {
-      // Open regenerate dialog with feedback
-      setShowRegenerateDialog(true)
-    } else {
-      // Simple regenerate without feedback
-      // TODO: Implement simple regeneration
-      alert(`Regenerate functionality coming soon!\nPrompt: ${currentVideo.prompt}`)
+    // Just regenerate with the same prompt
+    await handleRegenerateWithPrompt(currentVideo.prompt)
+  }
+
+  // Handle click on feedback comment to seek to timestamp
+  const handleCommentClick = (timestamp: number) => {
+    if (!videoRef.current) return
+    videoRef.current.currentTime = timestamp
+    setCurrentTime(timestamp)
+  }
+
+  // Handle regenerate from feedback panel
+  const handleRegenerateFromPanel = async () => {
+    if (!currentVideo || comments.length === 0) return
+
+    setIsRefining(true)
+    try {
+      // Call Gemini to refine prompt
+      const response = await fetch(`/api/videos/${currentVideo.id}/refine-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originalPrompt: currentVideo.prompt,
+          comments: comments.map((c) => ({
+            timestamp: c.timestamp,
+            text: c.text,
+            boundingBox: c.boundingBox,
+          })),
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        // Get first frame if available
+        const firstFrameUrl = comments.length > 0 ? comments[0].frameUrl : undefined
+        // Regenerate with refined prompt
+        await handleRegenerateWithPrompt(data.refinedPrompt, firstFrameUrl)
+      }
+    } catch (error) {
+      console.error('Failed to refine prompt:', error)
+    } finally {
+      setIsRefining(false)
     }
   }
 
@@ -319,6 +357,10 @@ export function VideoPanel() {
       if (response.ok) {
         const data = await response.json()
         setComments((prev) => [...prev, data.comment])
+        // Show feedback panel when first comment is added
+        if (comments.length === 0) {
+          setShowFeedbackPanel(true)
+        }
       }
     } catch (error) {
       console.error('Failed to add comment:', error)
@@ -398,9 +440,11 @@ export function VideoPanel() {
   }
 
   return (
-    <main className="flex-1 min-w-[600px] flex flex-col bg-background border-r border-border">
+    <>
+    <main className="flex-1 min-w-[600px] flex bg-background border-r border-border">
       {/* Video Viewport */}
-      <div className="flex-1 flex items-center justify-center p-8">
+      <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex items-center justify-center p-8">
         {isGenerating ? (
           /* Generating State */
           <div className="text-center max-w-md">
@@ -564,11 +608,15 @@ export function VideoPanel() {
                   )}
                 </button>
                 <button
-                  onClick={() => setShowAnnotations(!showAnnotations)}
+                  onClick={() => {
+                    const newState = !showAnnotations
+                    setShowAnnotations(newState)
+                    setShowFeedbackPanel(newState)
+                  }}
                   className={`btn-secondary flex items-center gap-2 ${showAnnotations ? 'bg-accent/20 border-accent' : ''}`}
                 >
                   <MessageSquare className="w-4 h-4" />
-                  {showAnnotations ? 'Close Annotations' : 'Annotate'}
+                  {showAnnotations ? 'Close Feedback' : 'Feedback'}
                   {comments.length > 0 && (
                     <span className="ml-1 text-xs bg-accent text-white px-1.5 py-0.5 rounded-full">
                       {comments.length}
@@ -629,6 +677,18 @@ export function VideoPanel() {
         )}
       </div>
 
+      {/* Feedback Panel - Shows when feedback mode is active */}
+      {showFeedbackPanel && currentVideo && (
+        <FeedbackPanel
+          comments={comments}
+          onCommentClick={handleCommentClick}
+          onDeleteComment={handleDeleteComment}
+          onRegenerateWithFeedback={handleRegenerateFromPanel}
+          isRefining={isRefining}
+        />
+      )}
+    </main>
+
       {/* YouTube Upload Panel */}
       <YouTubeUploadPanel
         isOpen={showYouTubeUpload}
@@ -685,6 +745,6 @@ export function VideoPanel() {
           </div>
         </div>
       )}
-    </main>
+    </>
   )
 }
