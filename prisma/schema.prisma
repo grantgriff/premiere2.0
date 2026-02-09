@@ -94,6 +94,7 @@ model Video {
   user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversation Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   comments     VideoComment[]
+  movieClips   MovieClip[]
 
   @@map("videos")
 }
@@ -211,6 +212,7 @@ model MovieClip {
 
   // Relationships
   movie Movie @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@unique([movieId, position]) // Ensure no duplicate positions within a movie
   @@map("movie_clips")
