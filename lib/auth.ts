@@ -1,4 +1,4 @@
-import { createBrowserClient } from './supabase'
+import { createBrowserClient, createServerClient } from './supabase'
 import type { Session } from '@supabase/supabase-js'
 
 export type AuthUser = {
@@ -77,9 +77,26 @@ export async function getSession(): Promise<Session | null> {
   return session
 }
 
-// Get current user
+// Get current user (browser)
 export async function getCurrentUser(): Promise<AuthUser | null> {
   const supabase = createBrowserClient()
+  const { data: { user }, error } = await supabase.auth.getUser()
+
+  if (error || !user) {
+    return null
+  }
+
+  return {
+    id: user.id,
+    email: user.email || '',
+    name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+    avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+  }
+}
+
+// Get current user (server-side for API routes)
+export async function getCurrentUserServer(): Promise<AuthUser | null> {
+  const supabase = await createServerClient()
   const { data: { user }, error } = await supabase.auth.getUser()
 
   if (error || !user) {
