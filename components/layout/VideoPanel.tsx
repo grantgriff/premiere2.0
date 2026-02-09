@@ -546,7 +546,9 @@ export function VideoPanel() {
       }
 
       const { movie: newMovie } = await createResponse.json()
-      console.log('[VideoPanel] Created new movie:', newMovie.id)
+      console.log('[VideoPanel] Created new movie - Full response:', JSON.stringify(newMovie))
+      console.log('[VideoPanel] Movie ID from API:', newMovie.id)
+      console.log('[VideoPanel] Movie title:', newMovie.title)
 
       // Add the movie to local state first
       const addMovie = useAppStore.getState().addMovie
@@ -556,11 +558,13 @@ export function VideoPanel() {
         updatedAt: new Date(newMovie.updatedAt),
         clips: []
       })
+      console.log('[VideoPanel] Added movie to local state with ID:', newMovie.id)
 
       // Longer delay to ensure database has committed the transaction and replicated
       await new Promise(resolve => setTimeout(resolve, 500))
 
       // Add clip to the new movie
+      console.log('[VideoPanel] About to call handleAddToMovie with ID:', newMovie.id)
       await handleAddToMovie(newMovie.id)
       setNewMovieTitle('')
     } catch (error) {
@@ -606,6 +610,7 @@ export function VideoPanel() {
 
   // Handle add to movie
   const handleAddToMovie = async (movieId: string) => {
+    console.log('[VideoPanel] handleAddToMovie called with movieId:', movieId)
     if (!currentVideo || !user) {
       console.error('[VideoPanel] Missing required data:', { currentVideo: !!currentVideo, user: !!user })
       return
