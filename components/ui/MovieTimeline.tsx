@@ -12,7 +12,6 @@ export function MovieTimeline() {
   const activeMovie = useActiveMovie()
   const removeClipFromMovie = useAppStore((state) => state.removeClipFromMovie)
   const updateMovie = useAppStore((state) => state.updateMovie)
-  const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
   const [showGenerateDialog, setShowGenerateDialog] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [playingClipId, setPlayingClipId] = useState<string | null>(null)
