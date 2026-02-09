@@ -1,4 +1,5 @@
-import { createBrowserClient, createServerClient } from './supabase'
+import { createBrowserClient } from './supabase'
+import { createServerClient } from './supabase-server'
 import type { Session } from '@supabase/supabase-js'
 
 export type AuthUser = {

@@ -1,13 +1,16 @@
-// Server-only Supabase client with user auth context
-// This file uses next/headers and can ONLY be imported in server components/routes
-
+import { SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient as createSSRServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getSupabaseUrl, getPublicKey } from './supabase'
 
-// Create server client with user's auth context from cookies (for API routes)
-// This respects RLS policies based on the authenticated user
-export async function createServerClient() {
+/**
+ * Create server client for API routes and Server Components
+ * Uses cookies from next/headers for session management
+ *
+ * NOTE: This file can only be imported server-side (API routes, Server Components)
+ * Do NOT import this in client components - it will cause build errors
+ */
+export async function createServerClient(): Promise<SupabaseClient> {
   const cookieStore = await cookies()
 
   return createSSRServerClient(
@@ -18,13 +21,15 @@ export async function createServerClient() {
         getAll() {
           return cookieStore.getAll()
         },
-        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
+        setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
             )
           } catch {
-            // setAll called from Server Component - can be ignored
+            // The `setAll` method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing
+            // user sessions.
           }
         },
       },
