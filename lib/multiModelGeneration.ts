@@ -1,7 +1,7 @@
 import { VideoModel, Video, useAppStore } from './store'
 import { startGeneration, pollVideoStatus, verifyVideoQuality, VideoStatusResponse, StyleReference } from './api'
 import { generateId } from './utils'
-import { QualityReport } from './models/types'
+import { QualityReport, MODEL_INFO } from './models/types'
 
 export interface GenerationState {
   model: VideoModel
@@ -15,12 +15,33 @@ export interface GenerationState {
 export type GenerationStateMap = Map<VideoModel, GenerationState>
 
 /**
+ * Map the requested duration to the closest allowed duration for a specific model
+ */
+function mapDurationForModel(requestedDuration: number, model: VideoModel): number {
+  const modelInfo = MODEL_INFO[model]
+  const allowedDurations = modelInfo.allowedDurations
+
+  // If the requested duration is allowed, use it
+  if (allowedDurations.includes(requestedDuration)) {
+    return requestedDuration
+  }
+
+  // Otherwise, find the closest allowed duration
+  const closest = allowedDurations.reduce((prev, curr) => {
+    return Math.abs(curr - requestedDuration) < Math.abs(prev - requestedDuration) ? curr : prev
+  })
+
+  console.log(`[MultiModel] Mapped duration ${requestedDuration}s -> ${closest}s for ${model}`)
+  return closest
+}
+
+/**
  * Start simultaneous generation for multiple models
  */
 export async function startMultiModelGeneration(
   models: VideoModel[],
   prompt: string,
-  duration: number,
+  requestedDuration: number,
   conversationId: string,
   styleReferences: StyleReference[],
   characterIds?: string[],
@@ -50,14 +71,17 @@ export async function startMultiModelGeneration(
       state.progress = 5
       onProgressUpdate?.(states)
 
-      // Start generation
+      // Map duration to what this model supports
+      const duration = mapDurationForModel(requestedDuration, model)
+
+      // Start generation with model-specific parameters
       const response = await startGeneration({
         prompt,
         model,
         duration,
         conversationId,
         styleReferences,
-        characterIds,
+        characterIds, // Backend will handle Veo vs non-Veo character handling
       })
 
       if (!response.success || !response.videoId) {
