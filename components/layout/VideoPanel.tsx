@@ -15,6 +15,9 @@ import {
   Youtube,
   Share2,
   MessageSquare,
+  Film,
+  Plus,
+  X,
 } from 'lucide-react'
 import { useAppStore, Video } from '@/lib/store'
 import { QualityBadge } from '@/components/ui/QualityBadge'
@@ -24,7 +27,7 @@ import { EditingPanel } from '@/components/ui/EditingPanel'
 import { Segment } from '@/components/ui/VideoTimeline'
 import { VideoAnnotationOverlay, VideoComment } from '@/components/ui/VideoAnnotationOverlay'
 import { RegenerateWithFeedbackDialog } from '@/components/ui/RegenerateWithFeedbackDialog'
-import { startGeneration, pollVideoStatus, VideoStatusResponse, createMessageApi } from '@/lib/api'
+import { startGeneration, pollVideoStatus, VideoStatusResponse, createMessage } from '@/lib/api'
 import { generateId } from '@/lib/utils'
 
 export function VideoPanel() {
@@ -39,6 +42,7 @@ export function VideoPanel() {
   const setGenerationProgress = useAppStore((state) => state.setGenerationProgress)
   const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
   const user = useAppStore((state) => state.user)
+  const movies = useAppStore((state) => state.movies)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -51,6 +55,8 @@ export function VideoPanel() {
   const [comments, setComments] = useState<VideoComment[]>([])
   const [showAnnotations, setShowAnnotations] = useState(false)
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false)
+  const [showAddToMovieDialog, setShowAddToMovieDialog] = useState(false)
+  const videoContainerRef = useRef<HTMLDivElement>(null)
 
   // Handle video time updates
   useEffect(() => {
@@ -216,7 +222,7 @@ export function VideoPanel() {
         timestamp: new Date(),
       }
       addMessage(activeConversationId, regeneratingMessage)
-      createMessageApi(activeConversationId, 'assistant', regeneratingMessage.content)
+      createMessage(activeConversationId, 'assistant', regeneratingMessage.content)
 
       // Start generation with refined prompt
       const response = await startGeneration({
@@ -295,7 +301,7 @@ export function VideoPanel() {
             content: completionMsg,
             timestamp: new Date(),
           })
-          createMessageApi(activeConversationId, 'assistant', completionMsg)
+          createMessage(activeConversationId, 'assistant', completionMsg)
         }
 
         // Handle failure
@@ -308,7 +314,7 @@ export function VideoPanel() {
             content: errorMsg,
             timestamp: new Date(),
           })
-          createMessageApi(activeConversationId, 'assistant', errorMsg)
+          createMessage(activeConversationId, 'assistant', errorMsg)
         }
       })
     } catch (error) {
@@ -321,7 +327,7 @@ export function VideoPanel() {
         content: errorMsg,
         timestamp: new Date(),
       })
-      createMessageApi(activeConversationId, 'assistant', errorMsg)
+      createMessage(activeConversationId, 'assistant', errorMsg)
     }
   }
 
@@ -393,6 +399,53 @@ export function VideoPanel() {
     }
   }
 
+  // Handle fullscreen
+  const handleFullscreen = () => {
+    if (!videoContainerRef.current) return
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    } else {
+      videoContainerRef.current.requestFullscreen()
+    }
+  }
+
+  // Handle add to movie
+  const handleAddToMovie = async (movieId: string) => {
+    if (!currentVideo || !user) return
+
+    try {
+      // Get the movie to find the next position
+      const movie = movies.find(m => m.id === movieId)
+      if (!movie) return
+
+      const nextPosition = movie.clips?.length || 0
+
+      // Add clip to movie
+      const response = await fetch(`/api/movies/${movieId}/clips`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId: currentVideo.id,
+          position: nextPosition,
+        }),
+      })
+
+      if (response.ok) {
+        // Reload movies to get updated data
+        const moviesResponse = await fetch(`/api/movies?userId=${user.id}`)
+        if (moviesResponse.ok) {
+          const data = await moviesResponse.json()
+          useAppStore.getState().setMovies(data.movies)
+        }
+
+        setShowAddToMovieDialog(false)
+      }
+    } catch (error) {
+      console.error('Failed to add to movie:', error)
+    }
+  }
+
   return (
     <main className="flex-1 min-w-[600px] flex flex-col bg-background border-r border-border">
       {/* Video Viewport */}
@@ -421,7 +474,7 @@ export function VideoPanel() {
         ) : currentVideo?.videoUrl ? (
           <div className="w-full max-w-4xl">
             {/* Video Container */}
-            <div className="video-container relative bg-black rounded-lg overflow-hidden">
+            <div ref={videoContainerRef} className="video-container relative bg-black rounded-lg overflow-hidden">
               <video
                 ref={videoRef}
                 src={currentVideo.videoUrl}
@@ -511,7 +564,7 @@ export function VideoPanel() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button className="btn-ghost p-2">
+                  <button onClick={handleFullscreen} className="btn-ghost p-2" title="Fullscreen">
                     <Maximize2 className="w-5 h-5" />
                   </button>
                 </div>
@@ -531,6 +584,15 @@ export function VideoPanel() {
 
               {/* Action Buttons */}
               <div className="flex items-center gap-3 pt-2">
+                <button
+                  onClick={() => setShowAddToMovieDialog(true)}
+                  className="btn-secondary flex items-center gap-2"
+                  disabled={movies.length === 0}
+                  title={movies.length === 0 ? 'Create a movie first' : 'Add to movie'}
+                >
+                  <Film className="w-4 h-4" />
+                  Add to Movie
+                </button>
                 <button
                   onClick={handleDownload}
                   className="btn-secondary flex items-center gap-2"
@@ -655,6 +717,45 @@ export function VideoPanel() {
           comments={comments}
           onRegenerate={handleRegenerateWithPrompt}
         />
+      )}
+
+      {/* Add to Movie Dialog */}
+      {showAddToMovieDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Film className="w-5 h-5" />
+                Add to Movie
+              </h2>
+              <button
+                onClick={() => setShowAddToMovieDialog(false)}
+                className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-foreground-secondary" />
+              </button>
+            </div>
+
+            <p className="text-sm text-foreground-secondary mb-4">
+              Select a movie to add this clip to:
+            </p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {movies.map((movie) => (
+                <button
+                  key={movie.id}
+                  onClick={() => handleAddToMovie(movie.id)}
+                  className="w-full p-3 text-left border border-[#3a3a3a] hover:bg-[#2a2a2a] rounded-lg transition-colors"
+                >
+                  <div className="font-medium text-foreground">{movie.title}</div>
+                  <div className="text-xs text-foreground-secondary mt-1">
+                    {movie.clips?.length || 0} clips
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </main>
   )
