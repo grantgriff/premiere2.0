@@ -125,6 +125,11 @@ export function Sidebar() {
       clips: []
     }
 
+    // Clear current video and switch to empty state for new query
+    setCurrentVideo(null)
+    setActiveConversation(null)
+    setMultiModelMode(false)
+
     // Add to local store
     useAppStore.getState().addMovie(newMovie)
 
