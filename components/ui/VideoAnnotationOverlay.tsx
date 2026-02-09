@@ -66,7 +66,7 @@ export function VideoAnnotationOverlay({
   }
 
   // Start drawing bounding box
-  const handleStartDrawBox = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleStartDrawBox = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation()
     if (!overlayRef.current) return
 
@@ -79,7 +79,7 @@ export function VideoAnnotationOverlay({
   }
 
   // Update bounding box while dragging
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
     if (!isDrawingBox || !drawStart || !overlayRef.current) return
 
     const rect = overlayRef.current.getBoundingClientRect()
