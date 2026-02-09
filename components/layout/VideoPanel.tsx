@@ -639,20 +639,44 @@ export function VideoPanel() {
         // Continue without frames - not critical
       }
 
-      // Add clip to movie
-      const response = await fetch(`/api/movies/${movieId}/clips`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          videoId: currentVideo.id,
-          position: nextPosition,
-          firstFrameUrl,
-          lastFrameUrl,
-        }),
-      })
+      // Add clip to movie with retry logic for newly created movies
+      let response: Response | null = null
+      let retries = 0
+      const maxRetries = 3
+      const retryDelays = [200, 500, 1000] // Exponential backoff
 
-      if (!response.ok) {
+      while (retries <= maxRetries) {
+        response = await fetch(`/api/movies/${movieId}/clips`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            videoId: currentVideo.id,
+            position: nextPosition,
+            firstFrameUrl,
+            lastFrameUrl,
+          }),
+        })
+
+        if (response.ok) {
+          break // Success!
+        }
+
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+
+        // Check if it's a "movie not found" error (foreign key constraint)
+        if (errorData.error?.includes('movie_clips_movie_id_fkey') ||
+            errorData.error?.includes('Movie not found')) {
+
+          if (retries < maxRetries) {
+            const delay = retryDelays[retries]
+            console.log(`[VideoPanel] Movie not found in DB yet, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries})...`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+            retries++
+            continue
+          }
+        }
+
+        // Non-retryable error or max retries exceeded
         console.error('[VideoPanel] Failed to add clip:', errorData)
         alert(`Failed to add clip to movie: ${errorData.error}`)
         return
