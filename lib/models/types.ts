@@ -98,7 +98,7 @@ export const MODEL_INFO: Record<VideoModelId, Omit<VideoModel, 'generate' | 'che
     id: 'veo3_1',
     name: 'Veo 3.1',  // API model: veo-3.1-fast-generate-preview
     maxDuration: 8,
-    allowedDurations: [6, 8], // Veo API rounds 4s up to 6-8s anyway, so only offer 6 and 8
+    allowedDurations: [4, 6, 8], // Veo supports 4s, 6s, and 8s
     supportedInputs: ['text', 'image'],
     estimatedTime: '30-45s',
     costPer10Seconds: 0.5,
