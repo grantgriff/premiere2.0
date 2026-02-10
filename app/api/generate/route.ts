@@ -79,6 +79,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Enforce video generation limit (10 videos max per user)
+    const ADMIN_EMAILS = ['grant.griffith.12@gmail.com']
+    const isAdmin = ADMIN_EMAILS.includes(authUser.email || '')
+    const MAX_VIDEOS_PER_USER = 10
+
+    if (!isAdmin) {
+      const videoCount = await prisma.video.count({
+        where: { userId },
+      })
+
+      if (videoCount >= MAX_VIDEOS_PER_USER) {
+        return NextResponse.json(
+          { error: `You've reached the maximum of ${MAX_VIDEOS_PER_USER} videos. Please contact us to unlock more.` },
+          { status: 403 }
+        )
+      }
+    }
+
     // Ensure user record exists (needed for database relationships)
     const user = await prisma.user.findUnique({
       where: { id: userId },
