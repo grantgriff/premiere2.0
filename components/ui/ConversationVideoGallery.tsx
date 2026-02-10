@@ -51,7 +51,8 @@ export function ConversationVideoGallery({
       }
     })
 
-    return groups
+    // Reverse so most recent groups appear on the right
+    return groups.reverse()
   }, [videos])
 
   if (videoGroups.length === 0) {

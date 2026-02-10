@@ -140,6 +140,7 @@ export function QualityBadge({ score, report, size = 'md', showDetails = true }:
           )}
 
           {/* Quality Dimensions */}
+          {report.dimensions && (
           <div className="space-y-2 mb-4">
             <h4 className="font-medium text-foreground flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
@@ -148,31 +149,32 @@ export function QualityBadge({ score, report, size = 'md', showDetails = true }:
             <div className="grid grid-cols-1 gap-2">
               <DimensionBar
                 label="Prompt Accuracy"
-                value={report.dimensions.promptAccuracy}
+                value={report.dimensions.promptAccuracy ?? 0}
                 icon={Target}
               />
               <DimensionBar
                 label="Anatomical Accuracy"
-                value={report.dimensions.anatomicalAccuracy}
+                value={report.dimensions.anatomicalAccuracy ?? 0}
                 icon={Users}
               />
               <DimensionBar
                 label="Physics Realism"
-                value={report.dimensions.physicsRealism}
+                value={report.dimensions.physicsRealism ?? 0}
                 icon={Zap}
               />
               <DimensionBar
                 label="Temporal Consistency"
-                value={report.dimensions.temporalConsistency}
+                value={report.dimensions.temporalConsistency ?? 0}
                 icon={Film}
               />
               <DimensionBar
                 label="Visual Quality"
-                value={report.dimensions.visualQuality}
+                value={report.dimensions.visualQuality ?? 0}
                 icon={Eye}
               />
             </div>
           </div>
+          )}
 
           {/* Issues */}
           {report.issues && report.issues.length > 0 && (

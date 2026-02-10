@@ -171,12 +171,17 @@ export function VideoPanel() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  // Handle regenerate - simple version without feedback
+  // Handle regenerate - opens feedback dialog if comments exist, otherwise regenerates directly
   const handleRegenerate = async () => {
     if (!currentVideo || !activeConversationId || !user) return
 
-    // Just regenerate with the same prompt
-    await handleRegenerateWithPrompt(currentVideo.prompt)
+    if (comments.length > 0) {
+      // Open the feedback dialog so user can review and refine
+      setShowRegenerateDialog(true)
+    } else {
+      // No feedback - just regenerate with the same prompt
+      await handleRegenerateWithPrompt(currentVideo.prompt)
+    }
   }
 
   // Handle click on feedback comment to seek to timestamp
@@ -794,7 +799,7 @@ export function VideoPanel() {
             />
           )}
 
-          <div className="flex-1 flex items-center justify-center p-8">
+          <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto">
         {isGenerating ? (
           /* Generating State */
           <div className="text-center max-w-md">
@@ -944,8 +949,7 @@ export function VideoPanel() {
                 <button
                   onClick={() => setShowAddToMovieDialog(true)}
                   className="btn-secondary flex items-center gap-2"
-                  disabled={movies.length === 0}
-                  title={movies.length === 0 ? 'Create a movie first' : 'Add to movie'}
+                  title="Add to movie"
                 >
                   <Film className="w-4 h-4" />
                   Add to Movie
