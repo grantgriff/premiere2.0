@@ -620,7 +620,7 @@ export function ChatPanel() {
       </div>
 
       {/* Model Selector */}
-      <div className="px-4 py-3 border-t border-border">
+      <div className="px-4 py-3 border-t border-border" data-onboarding="model-selection">
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs text-foreground-secondary">Model</label>
           {selectedModels.length > 1 && (
@@ -900,6 +900,7 @@ export function ChatPanel() {
               className={`btn-ghost p-1.5 ${selectedCharacterIds.length > 0 ? 'text-accent' : ''}`}
               title="Tag character"
               disabled={isGenerating}
+              data-onboarding="character-button"
             >
               <AtSign className="w-4 h-4" />
             </button>
@@ -919,6 +920,7 @@ export function ChatPanel() {
             type="submit"
             disabled={!input.trim() || isGenerating}
             className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            data-onboarding="generate-button"
           >
             {isGenerating ? (
               <>

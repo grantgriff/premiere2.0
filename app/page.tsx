@@ -11,6 +11,7 @@ import { Video, BarChart3, LogOut, User } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { signOut } from '@/lib/auth'
 import { useAppStore, useActiveMovie } from '@/lib/store'
+import { OnboardingOverlay } from '@/components/ui/OnboardingOverlay'
 
 export default function Home() {
   const [activeView, setActiveView] = useState<'studio' | 'analytics'>('studio')
@@ -183,6 +184,9 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* Onboarding for new users */}
+      <OnboardingOverlay />
     </div>
   )
 }
