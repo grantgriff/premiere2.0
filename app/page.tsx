@@ -7,7 +7,7 @@ import { MultiModelVideoPanel } from '@/components/layout/MultiModelVideoPanel'
 import { ChatPanel } from '@/components/layout/ChatPanel'
 import { AnalyticsDashboard } from '@/components/ui/AnalyticsDashboard'
 import { MovieTimeline } from '@/components/ui/MovieTimeline'
-import { Video, BarChart3, LogOut, User } from 'lucide-react'
+import { Video, BarChart3, LogOut, User, Info } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { signOut } from '@/lib/auth'
 import { useAppStore, useActiveMovie } from '@/lib/store'
@@ -134,6 +134,13 @@ export default function Home() {
           {/* User Menu */}
           {user && (
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => window.dispatchEvent(new Event('start-onboarding'))}
+                className="p-1.5 rounded-md text-foreground-secondary hover:text-foreground hover:bg-background-secondary transition-colors"
+                title="How it works"
+              >
+                <Info className="w-4 h-4" />
+              </button>
               <div className="flex items-center gap-2">
                 {user.avatarUrl ? (
                   <img

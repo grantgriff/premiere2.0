@@ -56,6 +56,16 @@ export function OnboardingOverlay() {
     return () => clearTimeout(timer)
   }, [])
 
+  // Allow manual trigger from anywhere via custom event
+  useEffect(() => {
+    const handleStart = () => {
+      setCurrentStep(0)
+      setIsVisible(true)
+    }
+    window.addEventListener('start-onboarding', handleStart)
+    return () => window.removeEventListener('start-onboarding', handleStart)
+  }, [])
+
   const positionElements = useCallback(() => {
     if (!isVisible) return
 
