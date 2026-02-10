@@ -578,14 +578,19 @@ export function CharacterManager({
                         <Upload className="w-8 h-8 mb-2" />
                         <p className="text-sm">Click to upload image</p>
                         <p className="text-xs text-foreground-secondary/60 mt-1">
-                          JPEG only — clear face shot recommended
+                          JPEG only
                         </p>
                       </div>
                     )}
                   </div>
-                  <p className="mt-2 text-xs text-yellow-500/80">
-                    Do not upload photos of celebrities or public figures — they violate Vertex AI usage policies and will cause video generation to fail.
-                  </p>
+                  <div className="mt-2 space-y-1.5">
+                    <p className="text-xs text-foreground-secondary">
+                      Upload a photo of <span className="text-foreground font-medium">one person only</span> — close enough to clearly see their face, hair, and distinguishing features. Headshots and waist-up portraits work best.
+                    </p>
+                    <p className="text-xs text-yellow-500/80">
+                      Do not upload photos of celebrities or public figures — they violate Vertex AI usage policies and will cause video generation to fail.
+                    </p>
+                  </div>
                   <input
                     ref={fileInputRef}
                     type="file"
