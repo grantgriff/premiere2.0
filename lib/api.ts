@@ -58,6 +58,17 @@ export async function startGeneration(request: GenerationRequest): Promise<Gener
       body: JSON.stringify(request),
     })
 
+    // Handle non-JSON responses (502/504 gateway errors return HTML)
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      const text = await response.text()
+      console.error('[startGeneration] Non-JSON response:', response.status, text.slice(0, 200))
+      return {
+        success: false,
+        error: `Server error (${response.status}). Please try again.`,
+      }
+    }
+
     const data = await response.json()
 
     if (!response.ok) {
@@ -83,6 +94,26 @@ export async function startGeneration(request: GenerationRequest): Promise<Gener
 export async function checkGenerationStatus(videoId: string): Promise<VideoStatusResponse> {
   try {
     const response = await fetch(`/api/generate?videoId=${videoId}`)
+
+    // Handle non-JSON responses (502/504 gateway errors return HTML)
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      const text = await response.text()
+      console.error('[checkGenerationStatus] Non-JSON response:', response.status, text.slice(0, 200))
+      // Return processing status so polling continues instead of failing immediately
+      return {
+        id: videoId,
+        status: 'processing',
+        videoUrl: null,
+        thumbnailUrl: null,
+        qualityScore: null,
+        model: 'luma',
+        duration: 5,
+        createdAt: new Date().toISOString(),
+        completedAt: null,
+      }
+    }
+
     const data = await response.json()
 
     if (!response.ok) {
@@ -94,7 +125,7 @@ export async function checkGenerationStatus(videoId: string): Promise<VideoStatu
     console.error('[checkGenerationStatus] Network error:', error)
     return {
       id: videoId,
-      status: 'failed',
+      status: 'processing',
       videoUrl: null,
       thumbnailUrl: null,
       qualityScore: null,

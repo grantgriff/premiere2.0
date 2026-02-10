@@ -22,19 +22,19 @@ const STEPS: Step[] = [
     target: 'model-selection',
     title: 'Pick a Model & Duration',
     description: 'Choose an AI model (try Veo 3.1 for best quality) and set your clip duration. Select multiple models to compare outputs side-by-side.',
-    preferredSide: 'left',
+    preferredSide: 'top',
   },
   {
     target: 'character-button',
     title: 'Create & Tag Characters',
     description: 'Upload a character photo, then tag them with @ in your prompt to keep a consistent look across clips. Veo 3.1 supports image references — other models use a text description.',
-    preferredSide: 'left',
+    preferredSide: 'top',
   },
   {
     target: 'generate-button',
     title: 'Generate Your Video',
     description: 'Type a prompt describing your scene and hit Generate. Your video will appear in the center panel when ready.',
-    preferredSide: 'top',
+    preferredSide: 'bottom',
   },
 ]
 
@@ -60,7 +60,16 @@ export function OnboardingOverlay() {
     if (!isVisible) return
 
     const step = STEPS[currentStep]
-    const el = document.querySelector(`[data-onboarding="${step.target}"]`)
+    // Find all matching elements and pick the first one that's actually visible
+    const candidates = document.querySelectorAll(`[data-onboarding="${step.target}"]`)
+    let el: Element | null = null
+    for (const candidate of candidates) {
+      const r = candidate.getBoundingClientRect()
+      if (r.width > 0 && r.height > 0) {
+        el = candidate
+        break
+      }
+    }
     if (!el) return
 
     const rect = el.getBoundingClientRect()
