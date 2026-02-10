@@ -586,6 +586,9 @@ export function CharacterManager({
                       </div>
                     )}
                   </div>
+                  <p className="mt-2 text-xs text-yellow-500/80">
+                    Do not upload photos of celebrities or public figures — they violate Vertex AI usage policies and will cause video generation to fail.
+                  </p>
                   <input
                     ref={fileInputRef}
                     type="file"
