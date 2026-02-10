@@ -98,6 +98,8 @@ interface VertexOperationResponse {
       bytesBase64Encoded?: string
       mimeType?: string
     }>
+    raiMediaFilteredCount?: number
+    raiMediaFilteredReasons?: string[]
   }
 }
 
@@ -528,12 +530,21 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
       }
     }
 
-    // Check for done without video (API bug)
+    // Check for RAI content filtering (video was generated but blocked by safety filter)
+    if (data.done && data.response?.raiMediaFilteredCount && data.response.raiMediaFilteredCount > 0) {
+      console.warn('[Veo] Video was filtered by Google Responsible AI:', data.response.raiMediaFilteredReasons)
+      return {
+        status: 'failed',
+        error: 'Your video was blocked by Google\'s content safety filter. This isn\'t a bug — the AI model generated content that didn\'t pass review. Try rephrasing your prompt or using a different description.'
+      }
+    }
+
+    // Check for done without video (unexpected API response)
     if (data.done && (!data.response || !data.response.videos || data.response.videos.length === 0)) {
       console.error('[Veo] Operation marked done but no videos in response:', JSON.stringify(data))
       return {
         status: 'failed',
-        error: 'Veo marked operation as complete but did not provide video'
+        error: 'Veo completed but did not return a video. Try again with a different prompt.'
       }
     }
 
