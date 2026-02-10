@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Send,
   Image as ImageIcon,
@@ -59,6 +59,7 @@ export function ChatPanel() {
   const [selectedYouTubeVideos, setSelectedYouTubeVideos] = useState<YouTubeVideo[]>([])
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [videoUsage, setVideoUsage] = useState<{ remaining: number | null; maxVideos: number | null; isAdmin: boolean } | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null) as React.RefObject<HTMLTextAreaElement>
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -93,6 +94,30 @@ export function ChatPanel() {
   const setUser = useAppStore((state) => state.setUser)
 
   const activeConversation = useActiveConversation()
+
+  // Fetch video usage quota
+  const fetchUsage = useCallback(async () => {
+    try {
+      const res = await fetch('/api/usage')
+      if (res.ok) {
+        const data = await res.json()
+        setVideoUsage({ remaining: data.remaining, maxVideos: data.maxVideos, isAdmin: data.isAdmin })
+      }
+    } catch {
+      // Silently fail — usage display is non-critical
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchUsage()
+  }, [fetchUsage])
+
+  // Refresh usage after generation completes
+  useEffect(() => {
+    if (!isGenerating) {
+      fetchUsage()
+    }
+  }, [isGenerating, fetchUsage])
 
   // Initialize selectedModels with default model if empty
   useEffect(() => {
@@ -877,7 +902,14 @@ export function ChatPanel() {
         </div>
 
         <div className="flex items-center justify-between mt-3">
-          <span className="text-xs text-foreground-secondary">{input.length}/2000</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-foreground-secondary">{input.length}/2000</span>
+            {videoUsage && !videoUsage.isAdmin && videoUsage.remaining !== null && (
+              <span className={`text-xs ${videoUsage.remaining <= 3 ? 'text-warning' : 'text-foreground-secondary'} ${videoUsage.remaining === 0 ? 'text-error' : ''}`}>
+                {videoUsage.remaining}/{videoUsage.maxVideos} videos left
+              </span>
+            )}
+          </div>
           <button
             type="submit"
             disabled={!input.trim() || isGenerating}
