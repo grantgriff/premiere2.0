@@ -394,9 +394,16 @@ export async function checkVeoStatus(operationName: string): Promise<GenerationS
         errorMessage: data.error.message,
         errorDetails: data.error.details
       })
+
+      // Detect prompt-level content policy rejection
+      const msg = data.error.message || ''
+      const isPromptRejection = msg.includes('usage guidelines') || msg.includes('prompt could not be submitted')
+
       return {
         status: 'failed',
-        error: data.error.message
+        error: isPromptRejection
+          ? 'Your prompt was flagged by Google\'s content policy and couldn\'t be submitted. This usually happens with celebrity names, brand references, or sensitive topics. Try rephrasing without specific names or trademarks.'
+          : msg
       }
     }
 

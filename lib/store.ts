@@ -159,12 +159,14 @@ interface AppState {
     status: 'queued' | 'processing' | 'completed' | 'failed'
     progress: number
     video?: Video
+    error?: string
   }>
   setMultiModelGenerations: (generations: Array<{
     model: VideoModel
     status: 'queued' | 'processing' | 'completed' | 'failed'
     progress: number
     video?: Video
+    error?: string
   }>) => void
 
   // UI State

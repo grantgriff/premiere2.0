@@ -19,7 +19,7 @@ import { CharacterCard } from './CharacterCard'
 import { generateId } from '@/lib/utils'
 import { useAuth } from '@/components/AuthProvider'
 import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
-import { resizeImageForVideo, VIDEO_DIMENSIONS } from '@/lib/image-utils'
+// image-utils removed: Veo handles character reference images natively, no resize needed
 import { uploadToGCS } from '@/lib/gcs'
 
 interface CharacterManagerProps {
@@ -168,6 +168,10 @@ export function CharacterManager({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      if (!file.type.includes('jpeg') && !file.type.includes('jpg')) {
+        alert('Please upload a JPEG image (.jpg or .jpeg). Other formats are not supported.')
+        return
+      }
       setImageFile(file)
       const reader = new FileReader()
       reader.onloadend = () => {
@@ -200,15 +204,10 @@ export function CharacterManager({
       // Upload image to Supabase storage if a file was selected
       let uploadedImageUrl: string | null = null
       if (imageFile) {
-        // Resize image to standard video dimensions (1280x720) for compatibility with Sora/Luma/Runway
-        console.log(`[CharacterManager] Resizing image to ${VIDEO_DIMENSIONS.width}x${VIDEO_DIMENSIONS.height} for video generation compatibility...`)
-        const resizedImageBlob = await resizeImageForVideo(imageFile)
-
-        // Convert Blob to File for upload
-        const resizedFile = new File([resizedImageBlob], imageFile.name, { type: 'image/jpeg' })
+        console.log(`[CharacterManager] Uploading character image as-is (${imageFile.size} bytes)...`)
 
         const path = `${user.id}/${generateId()}_${imageFile.name}`
-        uploadedImageUrl = await uploadToStorage(STORAGE_BUCKETS.IMAGES, path, resizedFile)
+        uploadedImageUrl = await uploadToStorage(STORAGE_BUCKETS.IMAGES, path, imageFile)
 
         if (!uploadedImageUrl) {
           console.error('Failed to upload character image')
@@ -217,7 +216,7 @@ export function CharacterManager({
           return
         }
 
-        console.log(`[CharacterManager] ✓ Character image uploaded and resized to ${VIDEO_DIMENSIONS.width}x${VIDEO_DIMENSIONS.height}`)
+        console.log(`[CharacterManager] ✓ Character image uploaded`)
       }
 
       const newCharacter: Character = {
@@ -324,15 +323,10 @@ export function CharacterManager({
       // Upload new image to Supabase storage if a file was selected
       let uploadedImageUrl: string | null = null
       if (imageFile) {
-        // Resize image to standard video dimensions (1280x720)
-        console.log(`[CharacterManager] Resizing updated image to ${VIDEO_DIMENSIONS.width}x${VIDEO_DIMENSIONS.height}...`)
-        const resizedImageBlob = await resizeImageForVideo(imageFile)
-
-        // Convert Blob to File for upload
-        const resizedFile = new File([resizedImageBlob], imageFile.name, { type: 'image/jpeg' })
+        console.log(`[CharacterManager] Uploading updated character image as-is (${imageFile.size} bytes)...`)
 
         const path = `${user.id}/${generateId()}_${imageFile.name}`
-        uploadedImageUrl = await uploadToStorage(STORAGE_BUCKETS.IMAGES, path, resizedFile)
+        uploadedImageUrl = await uploadToStorage(STORAGE_BUCKETS.IMAGES, path, imageFile)
 
         if (!uploadedImageUrl) {
           console.error('Failed to upload character image')
@@ -341,7 +335,7 @@ export function CharacterManager({
           return
         }
 
-        console.log(`[CharacterManager] ✓ Updated character image resized to ${VIDEO_DIMENSIONS.width}x${VIDEO_DIMENSIONS.height}`)
+        console.log(`[CharacterManager] ✓ Updated character image uploaded`)
       }
 
       const updates: Partial<Character> = {
@@ -577,15 +571,18 @@ export function CharacterManager({
                         <Upload className="w-8 h-8 mb-2" />
                         <p className="text-sm">Click to upload image</p>
                         <p className="text-xs text-foreground-secondary/60 mt-1">
-                          Clear face shot recommended
+                          JPEG only — clear face shot recommended
                         </p>
                       </div>
                     )}
                   </div>
+                  <p className="mt-2 text-xs text-yellow-500/80">
+                    Do not upload photos of celebrities or public figures — they violate Vertex AI usage policies and will cause video generation to fail.
+                  </p>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,.jpg,.jpeg"
                     onChange={handleFileSelect}
                     className="hidden"
                   />

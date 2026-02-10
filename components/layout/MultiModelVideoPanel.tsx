@@ -13,6 +13,7 @@ interface GenerationState {
   status: 'queued' | 'processing' | 'completed' | 'failed'
   progress: number
   video?: Video
+  error?: string
 }
 
 interface MovieSelectorModalProps {
@@ -250,6 +251,7 @@ export function MultiModelVideoPanel({ generations }: MultiModelVideoPanelProps)
                 status={gen.status}
                 progress={gen.progress}
                 video={gen.video}
+                error={gen.error}
                 onAddToMovie={handleAddToMovie}
                 onDownload={handleDownload}
               />

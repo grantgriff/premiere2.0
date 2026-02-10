@@ -11,6 +11,7 @@ interface GenerationPanelProps {
   status: 'queued' | 'processing' | 'completed' | 'failed'
   progress: number
   video?: Video
+  error?: string
   onAddToMovie?: (video: Video) => void
   onDownload?: (video: Video) => void
   onSetAsCurrentVideo?: (video: Video) => void
@@ -30,6 +31,7 @@ export function GenerationPanel({
   status,
   progress,
   video,
+  error,
   onAddToMovie,
   onDownload,
   onSetAsCurrentVideo
@@ -185,12 +187,14 @@ export function GenerationPanel({
         )}
 
         {status === 'failed' && (
-          <div className="text-center">
+          <div className="text-center px-2">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
               <AlertCircle className="w-8 h-8 text-red-500" />
             </div>
             <p className="text-sm text-red-500">Generation failed</p>
-            <p className="text-xs text-foreground-secondary mt-1">Please try again</p>
+            <p className="text-xs text-foreground-secondary mt-1">
+              {error || 'Please try again'}
+            </p>
           </div>
         )}
       </div>

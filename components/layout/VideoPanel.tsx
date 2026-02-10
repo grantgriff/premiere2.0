@@ -25,7 +25,7 @@ import { VideoAnnotationOverlay, VideoComment } from '@/components/ui/VideoAnnot
 import { RegenerateWithFeedbackDialog } from '@/components/ui/RegenerateWithFeedbackDialog'
 import { FeedbackPanel } from '@/components/ui/FeedbackPanel'
 import { ConversationVideoGallery } from '@/components/ui/ConversationVideoGallery'
-import { startGeneration, pollVideoStatus, VideoStatusResponse, createMessage } from '@/lib/api'
+import { startGeneration, pollVideoStatus, VideoStatusResponse, createMessage, createConversation as createConversationApi } from '@/lib/api'
 import { generateId } from '@/lib/utils'
 import { extractBothFrames } from '@/lib/frameExtraction'
 import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
@@ -50,6 +50,7 @@ export function VideoPanel() {
   const setActiveMovie = useAppStore((state) => state.setActiveMovie)
   const updateMovie = useAppStore((state) => state.updateMovie)
   const setMovies = useAppStore((state) => state.setMovies)
+  const addConversation = useAppStore((state) => state.addConversation)
 
   // Get the active conversation
   const activeConversation = conversations.find((c) => c.id === activeConversationId)
@@ -776,6 +777,27 @@ export function VideoPanel() {
 
         // Set this movie as active so timeline shows
         setActiveMovie(movieId)
+
+        // Create a new conversation for this movie so user can continue adding clips
+        const movie = reloadedMovies.find((m: any) => m.id === movieId)
+        const movieTitle = movie?.title || 'Untitled Movie'
+        try {
+          const dbConversation = await createConversationApi(`${movieTitle} — Movie`)
+          if (dbConversation) {
+            const newConv = {
+              id: dbConversation.id,
+              title: `${movieTitle} — Movie`,
+              messages: [],
+              videos: [],
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+            addConversation(newConv)
+            console.log('[VideoPanel] Created movie conversation:', newConv.id)
+          }
+        } catch (convError) {
+          console.warn('[VideoPanel] Failed to create movie conversation:', convError)
+        }
       }
 
       setShowAddToMovieDialog(false)
@@ -787,9 +809,9 @@ export function VideoPanel() {
 
   return (
     <>
-      <main className="flex-1 min-w-[600px] flex bg-background border-r border-border">
+      <main className="flex-1 min-w-[600px] min-h-0 flex bg-background border-r border-border">
         {/* Video Viewport */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col">
           {/* Conversation Video Gallery */}
           {activeConversation && activeConversation.videos.length > 0 && (
             <ConversationVideoGallery
@@ -799,7 +821,7 @@ export function VideoPanel() {
             />
           )}
 
-          <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto">
+          <div className="flex-1 min-h-0 flex items-center justify-center p-8 overflow-y-auto">
         {isGenerating ? (
           /* Generating State */
           <div className="text-center max-w-md">
