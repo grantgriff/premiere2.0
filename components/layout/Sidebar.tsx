@@ -456,6 +456,25 @@ export function Sidebar() {
                           </span>
                         )}
                       </p>
+                      {/* Clip thumbnail strip */}
+                      {movie.clips.length > 0 && (
+                        <div className="flex gap-1 mt-1.5">
+                          {movie.clips.slice(0, 4).map((clip, i) => (
+                            <div key={clip.id} className="w-8 h-5 rounded overflow-hidden bg-[#0a0a0a] border border-[#2a2a2a]">
+                              {clip.video?.thumbnailUrl ? (
+                                <img src={clip.video.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full bg-gradient-to-br from-accent/10 to-purple-500/10" />
+                              )}
+                            </div>
+                          ))}
+                          {movie.clips.length > 4 && (
+                            <div className="w-8 h-5 rounded bg-[#0a0a0a] border border-[#2a2a2a] flex items-center justify-center">
+                              <span className="text-[8px] text-foreground-secondary">+{movie.clips.length - 4}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions */}

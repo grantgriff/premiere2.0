@@ -106,6 +106,21 @@ export function VideoPanel() {
     }
 
     const handleEnded = () => {
+      // If a movie playlist is active, advance to the next clip
+      const { moviePlaylist, advanceMoviePlaylist } = useAppStore.getState()
+      if (moviePlaylist.length > 0) {
+        const nextVideo = advanceMoviePlaylist()
+        if (nextVideo) {
+          // Auto-play the next clip after a brief pause
+          setTimeout(() => {
+            if (videoRef.current) {
+              videoRef.current.play().catch(() => {})
+              setIsPlaying(true)
+            }
+          }, 300)
+          return
+        }
+      }
       setIsPlaying(false)
       setProgress(0)
       setCurrentTime(0)
@@ -865,6 +880,22 @@ export function VideoPanel() {
                     <Film className="w-4 h-4" />
                     <span>Back to Comparison</span>
                   </button>
+                </div>
+              )}
+
+              {/* Movie Playlist Indicator */}
+              {useAppStore.getState().moviePlaylist.length > 0 && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+                  <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-border text-xs text-foreground">
+                    <Film className="w-3.5 h-3.5 text-accent" />
+                    <span>Clip {useAppStore.getState().moviePlaylistIndex + 1} of {useAppStore.getState().moviePlaylist.length}</span>
+                    <button
+                      onClick={() => useAppStore.getState().clearMoviePlaylist()}
+                      className="ml-1 text-foreground-secondary hover:text-foreground"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               )}
 
