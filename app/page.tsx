@@ -170,10 +170,10 @@ export default function Home() {
                 {!activeConversationId && !isGenerating ? (
                   /* Welcome state - centered prompt bar */
                   <div className="flex-1 flex items-center justify-center bg-background">
-                    <WelcomePromptBar onSubmit={(prompt) => {
+                    <WelcomePromptBar onSubmit={(prompt, uploadedFiles) => {
                       // Focus the ChatPanel input and trigger submission
                       // We set the input via a custom event the ChatPanel listens for
-                      window.dispatchEvent(new CustomEvent('welcome-prompt-submit', { detail: { prompt } }))
+                      window.dispatchEvent(new CustomEvent('welcome-prompt-submit', { detail: { prompt, uploadedFiles } }))
                     }} />
                   </div>
                 ) : multiModelMode ? (

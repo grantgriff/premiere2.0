@@ -129,9 +129,20 @@ export function ChatPanel() {
   // Listen for welcome prompt submissions from the centered prompt bar
   useEffect(() => {
     const handleWelcomeSubmit = (e: Event) => {
-      const prompt = (e as CustomEvent).detail?.prompt
+      const detail = (e as CustomEvent).detail
+      const prompt = detail?.prompt
       if (prompt) {
         setInput(prompt)
+        // If files were uploaded from the welcome bar, add them
+        if (detail.uploadedFiles?.length > 0) {
+          const files: UploadedFile[] = detail.uploadedFiles.map((f: { type: 'image' | 'video'; file: File; previewUrl: string }) => ({
+            id: generateId(),
+            type: f.type,
+            file: f.file,
+            previewUrl: f.previewUrl,
+          }))
+          setUploadedFiles(files)
+        }
         // Trigger submission on next tick after input is set
         setTimeout(() => {
           const form = document.querySelector('form[data-chatpanel-form]') as HTMLFormElement
