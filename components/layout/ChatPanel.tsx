@@ -126,6 +126,25 @@ export function ChatPanel() {
     }
   }, [])
 
+  // Listen for welcome prompt submissions from the centered prompt bar
+  useEffect(() => {
+    const handleWelcomeSubmit = (e: Event) => {
+      const prompt = (e as CustomEvent).detail?.prompt
+      if (prompt) {
+        setInput(prompt)
+        // Trigger submission on next tick after input is set
+        setTimeout(() => {
+          const form = document.querySelector('form[data-chatpanel-form]') as HTMLFormElement
+          if (form) {
+            form.requestSubmit()
+          }
+        }, 50)
+      }
+    }
+    window.addEventListener('welcome-prompt-submit', handleWelcomeSubmit)
+    return () => window.removeEventListener('welcome-prompt-submit', handleWelcomeSubmit)
+  }, [])
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -819,7 +838,7 @@ export function ChatPanel() {
       )}
 
       {/* Input Area */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-border">
+      <form onSubmit={handleSubmit} data-chatpanel-form className="p-4 border-t border-border">
         <div className="relative">
           <textarea
             ref={inputRef}

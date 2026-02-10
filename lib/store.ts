@@ -142,6 +142,13 @@ interface AppState {
   addVideo: (conversationId: string, video: Video) => void
   updateVideo: (conversationId: string, videoId: string, updates: Partial<Video>) => void
 
+  // Movie playlist (for sequential playback)
+  moviePlaylist: Video[]
+  moviePlaylistIndex: number
+  setMoviePlaylist: (videos: Video[], startIndex?: number) => void
+  advanceMoviePlaylist: () => Video | null
+  clearMoviePlaylist: () => void
+
   // Generation state
   isGenerating: boolean
   setIsGenerating: (value: boolean) => void
@@ -252,6 +259,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Videos
   currentVideo: null,
   setCurrentVideo: (video) => set({ currentVideo: video }),
+
+  // Movie playlist
+  moviePlaylist: [],
+  moviePlaylistIndex: 0,
+  setMoviePlaylist: (videos, startIndex = 0) => set({
+    moviePlaylist: videos,
+    moviePlaylistIndex: startIndex,
+    currentVideo: videos[startIndex] || null,
+  }),
+  advanceMoviePlaylist: () => {
+    const current = get()
+    const nextIndex = current.moviePlaylistIndex + 1
+    if (nextIndex < current.moviePlaylist.length) {
+      const nextVideo = current.moviePlaylist[nextIndex]
+      set({ moviePlaylistIndex: nextIndex, currentVideo: nextVideo })
+      return nextVideo
+    }
+    // End of playlist
+    set({ moviePlaylist: [], moviePlaylistIndex: 0 })
+    return null
+  },
+  clearMoviePlaylist: () => set({ moviePlaylist: [], moviePlaylistIndex: 0 }),
   addVideo: (conversationId, video) =>
     set((state) => ({
       conversations: state.conversations.map((c) =>

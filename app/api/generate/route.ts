@@ -142,6 +142,7 @@ export async function POST(request: NextRequest) {
     let characterReferenceUrls: string[] = []
     let characterGcsUris: string[] = []
     let characterData: Character[] = []
+    let characterWarning: string | null = null
     if (characterIds && characterIds.length > 0) {
       console.log(`[Generate] Fetching ${characterIds.length} character(s):`, characterIds)
 
@@ -153,6 +154,7 @@ export async function POST(request: NextRequest) {
 
       if (charError) {
         console.error('[Generate] Error fetching characters:', charError)
+        characterWarning = 'Could not load character data. Video will generate without character references.'
       } else if (characters && characters.length > 0) {
         // Store character data for prompt enhancement
         characterData = characters as Character[]
@@ -166,42 +168,37 @@ export async function POST(request: NextRequest) {
           .map(c => c.reference_image_url)
           .filter((url): url is string => url !== null && url !== undefined)
 
+        // Warn if characters exist but have no image references
+        const charsWithoutGcs = characters.filter(c => !c.gcs_image_uri)
+        if (charsWithoutGcs.length > 0) {
+          const names = charsWithoutGcs.map(c => c.name).join(', ')
+          console.warn(`[Generate] ⚠️ Characters missing GCS URI (Veo won't use their images): ${names}`)
+          characterWarning = `Character image for "${names}" hasn't been synced to Google Cloud yet. Veo will use a text description instead — the character may not match the reference photo.`
+        }
+
         console.log(`[Generate] Found ${characterGcsUris.length} GCS URI(s) and ${characterReferenceUrls.length} HTTP URL(s)`)
         if (characterGcsUris.length > 0) {
           console.log(`[Generate] GCS URIs (for Veo): ${characterGcsUris.join(', ')}`)
         }
         if (characterReferenceUrls.length > 0) {
-          characterReferenceUrls.forEach(async (url, i) => {
+          // Test accessibility of character image URLs
+          await Promise.all(characterReferenceUrls.map(async (url, i) => {
             console.log(`[Generate] HTTP URL ${i + 1}: ${url.substring(0, 80)}...`)
-
-            // CRITICAL: Test if the character image URL is accessible
-            // If not, Luma/Runway/Sora will fail!
             try {
               const testResponse = await fetch(url, { method: 'HEAD' })
               if (!testResponse.ok) {
                 console.error(`[Generate] ⚠️ Character image ${i + 1} is NOT accessible! Status: ${testResponse.status}`)
-                console.error(`[Generate] URL: ${url}`)
-                console.error(`[Generate] This will cause video generation to FAIL!`)
-                console.error(`[Generate] Check Supabase storage bucket permissions - bucket must be PUBLIC`)
               } else {
                 console.log(`[Generate] ✓ Character image ${i + 1} is accessible`)
               }
             } catch (testError) {
-              console.error(`[Generate] ⚠️ Failed to test character image ${i + 1} accessibility:`, testError)
-              console.error(`[Generate] URL: ${url}`)
+              console.error(`[Generate] ⚠️ Failed to test character image ${i + 1}:`, testError)
             }
-          })
+          }))
         }
       } else {
-        // No characters found - this is the problem!
-        console.warn(`[Generate] ⚠️ Character query returned ZERO results!`)
-        console.warn(`[Generate] Queried IDs:`, characterIds)
-        console.warn(`[Generate] User ID filter: ${userId}`)
-        console.warn(`[Generate] This means either:`)
-        console.warn(`[Generate]   1. Character(s) don't exist in database`)
-        console.warn(`[Generate]   2. Character(s) belong to a different user_id`)
-        console.warn(`[Generate]   3. Character IDs are stale (deleted/recreated)`)
-        console.warn(`[Generate] Check Supabase 'characters' table directly`)
+        console.warn(`[Generate] ⚠️ Character query returned ZERO results for IDs:`, characterIds)
+        characterWarning = 'Character data could not be found. Video will generate without character references.'
       }
     }
 
@@ -426,6 +423,7 @@ export async function POST(request: NextRequest) {
       videoId,
       conversationId: convId,
       estimatedTime: modelInfo.estimatedTime,
+      warning: characterWarning || undefined,
     })
   } catch (error) {
     // Log full error details for debugging

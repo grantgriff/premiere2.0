@@ -12,6 +12,7 @@ import { useAuth } from '@/components/AuthProvider'
 import { signOut } from '@/lib/auth'
 import { useAppStore, useActiveMovie } from '@/lib/store'
 import { OnboardingOverlay } from '@/components/ui/OnboardingOverlay'
+import { WelcomePromptBar } from '@/components/ui/WelcomePromptBar'
 
 export default function Home() {
   const [activeView, setActiveView] = useState<'studio' | 'analytics'>('studio')
@@ -21,6 +22,8 @@ export default function Home() {
   const multiModelMode = useAppStore((state) => state.multiModelMode)
   const multiModelGenerations = useAppStore((state) => state.multiModelGenerations)
   const activeMovie = useActiveMovie()
+  const activeConversationId = useAppStore((state) => state.activeConversationId)
+  const isGenerating = useAppStore((state) => state.isGenerating)
 
   // Load characters and movies on app initialization
   useEffect(() => {
@@ -163,15 +166,26 @@ export default function Home() {
           {activeView === 'studio' ? (
             <>
               <div className="flex-1 flex overflow-hidden">
-                {/* Center Panel - Conditional based on multi-model mode */}
-                {multiModelMode ? (
+                {/* Center Panel */}
+                {!activeConversationId && !isGenerating ? (
+                  /* Welcome state - centered prompt bar */
+                  <div className="flex-1 flex items-center justify-center bg-background">
+                    <WelcomePromptBar onSubmit={(prompt) => {
+                      // Focus the ChatPanel input and trigger submission
+                      // We set the input via a custom event the ChatPanel listens for
+                      window.dispatchEvent(new CustomEvent('welcome-prompt-submit', { detail: { prompt } }))
+                    }} />
+                  </div>
+                ) : multiModelMode ? (
                   <MultiModelVideoPanel generations={multiModelGenerations} />
                 ) : (
                   <VideoPanel />
                 )}
 
-                {/* Right Sidebar - 360px fixed */}
-                <ChatPanel />
+                {/* Right Sidebar - 360px fixed (hidden off-screen in welcome state so it stays mounted) */}
+                <div className={!activeConversationId && !isGenerating ? 'sr-only' : ''}>
+                  <ChatPanel />
+                </div>
               </div>
 
               {/* Movie Timeline at bottom */}

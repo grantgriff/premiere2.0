@@ -106,24 +106,30 @@ export function MovieTimeline() {
     setPlayingClipId(playingClipId === clipId ? null : clipId)
   }
 
+  const setMoviePlaylist = useAppStore((state) => state.setMoviePlaylist)
+
   const handleClickClip = (clip: NonNullable<typeof activeMovie>['clips'][0], index: number) => {
-    // Set this video as the current video in the main player
-    if (clip.video) {
-      // Convert partial video data to full Video type
-      const fullVideo = {
-        ...clip.video,
+    if (!activeMovie || !clip.video) return
+
+    // Build a playlist of all clips from the clicked index onward
+    const playlistVideos = activeMovie.clips
+      .filter(c => c.video?.videoUrl)
+      .map(c => ({
+        ...c.video!,
+        id: c.video!.id || c.id,
+        prompt: c.video!.prompt || '',
+        model: c.video!.model || 'veo3_1',
         status: 'completed' as const,
         qualityScore: null,
         qualityReport: null,
         isVerifying: false,
         createdAt: new Date(),
         completedAt: new Date(),
-      }
-      setCurrentVideo(fullVideo)
+      }))
 
-      // TODO: Implement playlist mode to play clips sequentially from this point
-      // For now, just load the selected clip
-    }
+    // Find the position of the clicked clip in the filtered playlist
+    const startIndex = playlistVideos.findIndex(v => v.id === (clip.video!.id || clip.id))
+    setMoviePlaylist(playlistVideos, startIndex >= 0 ? startIndex : 0)
   }
 
   const handleStartEditingTitle = () => {
@@ -244,15 +250,42 @@ export function MovieTimeline() {
           {activeMovie.clips.length} clip{activeMovie.clips.length !== 1 ? 's' : ''}
         </div>
 
-        {/* Export button */}
+        {/* Play All & Export buttons */}
         {activeMovie.clips.length > 0 && (
-          <button
-            onClick={() => setShowExportDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent hover:bg-accent/90 text-white text-xs font-medium transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const playlistVideos = activeMovie.clips
+                  .filter(c => c.video?.videoUrl)
+                  .map(c => ({
+                    ...c.video!,
+                    id: c.video!.id || c.id,
+                    prompt: c.video!.prompt || '',
+                    model: c.video!.model || 'veo3_1',
+                    status: 'completed' as const,
+                    qualityScore: null,
+                    qualityReport: null,
+                    isVerifying: false,
+                    createdAt: new Date(),
+                    completedAt: new Date(),
+                  }))
+                if (playlistVideos.length > 0) {
+                  setMoviePlaylist(playlistVideos, 0)
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-foreground/10 hover:bg-foreground/20 text-foreground text-xs font-medium transition-colors"
+            >
+              <Play className="w-3.5 h-3.5" />
+              Play All
+            </button>
+            <button
+              onClick={() => setShowExportDialog(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent hover:bg-accent/90 text-white text-xs font-medium transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export
+            </button>
+          </div>
         )}
       </div>
 
