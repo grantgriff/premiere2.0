@@ -269,10 +269,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     currentVideo: videos[startIndex] || null,
   }),
   advanceMoviePlaylist: () => {
-    const state = useAppStore.getState()
-    const nextIndex = state.moviePlaylistIndex + 1
-    if (nextIndex < state.moviePlaylist.length) {
-      const nextVideo = state.moviePlaylist[nextIndex]
+    const current = get()
+    const nextIndex = current.moviePlaylistIndex + 1
+    if (nextIndex < current.moviePlaylist.length) {
+      const nextVideo = current.moviePlaylist[nextIndex]
       set({ moviePlaylistIndex: nextIndex, currentVideo: nextVideo })
       return nextVideo
     }
