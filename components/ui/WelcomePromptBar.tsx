@@ -131,7 +131,7 @@ export function WelcomePromptBar({ onSubmit }: WelcomePromptBarProps) {
         <form onSubmit={handleSubmit} className="relative">
           <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-2xl shadow-2xl">
             {/* Top row: Model, Duration, Characters */}
-            <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+            <div className="flex items-center gap-2 px-4 pt-3 pb-1" data-onboarding="model-selection">
               {/* Model selector */}
               <div className="relative">
                 <button
