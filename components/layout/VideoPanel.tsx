@@ -24,6 +24,7 @@ import { YouTubeUploadPanel } from '@/components/ui/YouTubeUploadPanel'
 import { VideoAnnotationOverlay, VideoComment } from '@/components/ui/VideoAnnotationOverlay'
 import { RegenerateWithFeedbackDialog } from '@/components/ui/RegenerateWithFeedbackDialog'
 import { FeedbackPanel } from '@/components/ui/FeedbackPanel'
+import { ConversationVideoGallery } from '@/components/ui/ConversationVideoGallery'
 import { startGeneration, pollVideoStatus, VideoStatusResponse, createMessage } from '@/lib/api'
 import { generateId } from '@/lib/utils'
 import { extractBothFrames } from '@/lib/frameExtraction'
@@ -34,6 +35,7 @@ export function VideoPanel() {
   const isGenerating = useAppStore((state) => state.isGenerating)
   const generationProgress = useAppStore((state) => state.generationProgress)
   const activeConversationId = useAppStore((state) => state.activeConversationId)
+  const conversations = useAppStore((state) => state.conversations)
   const addVideo = useAppStore((state) => state.addVideo)
   const updateVideo = useAppStore((state) => state.updateVideo)
   const addMessage = useAppStore((state) => state.addMessage)
@@ -48,6 +50,9 @@ export function VideoPanel() {
   const setActiveMovie = useAppStore((state) => state.setActiveMovie)
   const updateMovie = useAppStore((state) => state.updateMovie)
   const setMovies = useAppStore((state) => state.setMovies)
+
+  // Get the active conversation
+  const activeConversation = conversations.find((c) => c.id === activeConversationId)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -780,6 +785,15 @@ export function VideoPanel() {
       <main className="flex-1 min-w-[600px] flex bg-background border-r border-border">
         {/* Video Viewport */}
         <div className="flex-1 flex flex-col">
+          {/* Conversation Video Gallery */}
+          {activeConversation && activeConversation.videos.length > 0 && (
+            <ConversationVideoGallery
+              videos={activeConversation.videos}
+              currentVideoId={currentVideo?.id || null}
+              onVideoSelect={(video) => setCurrentVideo(video)}
+            />
+          )}
+
           <div className="flex-1 flex items-center justify-center p-8">
         {isGenerating ? (
           /* Generating State */
