@@ -809,9 +809,9 @@ export function VideoPanel() {
 
   return (
     <>
-      <main className="flex-1 min-w-[600px] flex bg-background border-r border-border">
+      <main className="flex-1 min-w-[600px] min-h-0 flex bg-background border-r border-border">
         {/* Video Viewport */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col">
           {/* Conversation Video Gallery */}
           {activeConversation && activeConversation.videos.length > 0 && (
             <ConversationVideoGallery
@@ -821,7 +821,7 @@ export function VideoPanel() {
             />
           )}
 
-          <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto">
+          <div className="flex-1 min-h-0 flex items-center justify-center p-8 overflow-y-auto">
         {isGenerating ? (
           /* Generating State */
           <div className="text-center max-w-md">

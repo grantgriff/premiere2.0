@@ -168,6 +168,10 @@ export function CharacterManager({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      if (!file.type.includes('jpeg') && !file.type.includes('jpg')) {
+        alert('Please upload a JPEG image (.jpg or .jpeg). Other formats are not supported.')
+        return
+      }
       setImageFile(file)
       const reader = new FileReader()
       reader.onloadend = () => {
@@ -577,7 +581,7 @@ export function CharacterManager({
                         <Upload className="w-8 h-8 mb-2" />
                         <p className="text-sm">Click to upload image</p>
                         <p className="text-xs text-foreground-secondary/60 mt-1">
-                          Clear face shot recommended
+                          JPEG only — clear face shot recommended
                         </p>
                       </div>
                     )}
@@ -585,7 +589,7 @@ export function CharacterManager({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,.jpg,.jpeg"
                     onChange={handleFileSelect}
                     className="hidden"
                   />
