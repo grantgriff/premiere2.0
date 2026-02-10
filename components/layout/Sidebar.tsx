@@ -216,7 +216,7 @@ export function Sidebar() {
       <div className="p-3 relative new-dropdown-container">
         <button
           onClick={() => setNewDropdownOpen(!newDropdownOpen)}
-          className="w-full h-10 rounded-lg border border-[#3a3a3a] hover:bg-[#2a2a2a] flex items-center justify-center gap-2 text-sm text-foreground transition-colors"
+          className="w-full h-10 rounded-lg border border-[#3a3a3a] hover:bg-[#2a2a2a] flex items-center px-4 gap-2 text-sm text-foreground transition-colors"
           data-onboarding="new-button"
         >
           <Plus className="w-4 h-4" />
