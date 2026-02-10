@@ -481,7 +481,11 @@ export async function GET(request: NextRequest) {
 
       if (dbJob && dbJob.externalJobId) {
         // Check if job has exceeded max attempts or timeout
-        const MAX_ATTEMPTS = 3
+        // Each poll from the client is ~2s apart. Generations take 20-120s depending
+        // on model. In serverless (Vercel), the in-memory cache is lost between
+        // invocations, so every poll hits this DB path and increments attempts.
+        // 90 attempts × 2s = ~3 minutes, well above the slowest model (Sora ~120s).
+        const MAX_ATTEMPTS = 90
         const MAX_AGE_MS = 10 * 60 * 1000 // 10 minutes
         const jobAge = Date.now() - dbJob.createdAt.getTime()
 
