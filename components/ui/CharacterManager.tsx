@@ -435,6 +435,13 @@ export function CharacterManager({
           </button>
         </div>
 
+        {/* Veo hint */}
+        <div className="mx-6 mt-4 px-3 py-2 rounded-lg bg-accent/10 border border-accent/20">
+          <p className="text-xs text-foreground-secondary">
+            For best results, use <span className="font-medium text-foreground">Veo 3.1</span> — it's currently the only model that supports character reference images. Other models will use a text description of the character instead.
+          </p>
+        </div>
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {viewMode === 'grid' ? (

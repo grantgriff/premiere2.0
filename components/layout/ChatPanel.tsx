@@ -733,6 +733,11 @@ export function ChatPanel() {
               )
             })}
           </div>
+          {selectedModel !== 'veo3_1' && (
+            <p className="text-xs text-yellow-500/80 mt-2">
+              Tip: Veo 3.1 is the only model that uses character reference images. Other models rely on a text description instead.
+            </p>
+          )}
         </div>
       )}
 
