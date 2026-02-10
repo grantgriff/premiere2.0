@@ -5,7 +5,7 @@ import { User, Check } from 'lucide-react'
 import { useAppStore, Character } from '@/lib/store'
 
 interface CharacterMentionProps {
-  inputRef: React.RefObject<HTMLTextAreaElement>
+  inputRef: React.RefObject<HTMLTextAreaElement | null>
   value: string
   onChange: (value: string) => void
   onCharacterSelect?: (character: Character) => void
