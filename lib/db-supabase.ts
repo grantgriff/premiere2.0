@@ -166,6 +166,7 @@ export async function getOrCreateUser(authUser: {
   email: string
   name: string
   avatarUrl: string | null
+  providerId?: string
 }): Promise<DbUser | null> {
   const supabase = await createServerClient()
 
@@ -180,7 +181,7 @@ export async function getOrCreateUser(authUser: {
     return existingUser
   }
 
-  // Create new user
+  // Create new user (google_id is required by schema)
   const { data: newUser, error } = await supabase
     .from('users')
     .insert({
@@ -188,6 +189,7 @@ export async function getOrCreateUser(authUser: {
       email: authUser.email,
       name: authUser.name,
       avatar_url: authUser.avatarUrl,
+      google_id: authUser.providerId || authUser.id,
       credits: 100,
     })
     .select()

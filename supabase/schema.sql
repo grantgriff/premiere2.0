@@ -160,12 +160,13 @@ CREATE POLICY "Users can delete own characters" ON characters
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.users (id, email, name, avatar_url, credits)
+  INSERT INTO public.users (id, email, name, avatar_url, google_id, credits)
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
     COALESCE(NEW.raw_user_meta_data->>'avatar_url', NEW.raw_user_meta_data->>'picture'),
+    COALESCE(NEW.raw_user_meta_data->>'provider_id', NEW.id::text),
     100
   );
   RETURN NEW;

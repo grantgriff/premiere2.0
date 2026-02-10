@@ -59,6 +59,10 @@ export async function GET(request: Request) {
 
         // If user doesn't exist in public.users, create it
         if (!existingUser) {
+          // Extract provider ID for google_id column
+          const providerId = sessionData.user.identities?.[0]?.id
+            || sessionData.user.id
+
           const { error: insertError } = await adminClient
             .from('users')
             .insert({
@@ -71,6 +75,7 @@ export async function GET(request: Request) {
               avatar_url: sessionData.user.user_metadata?.avatar_url
                 || sessionData.user.user_metadata?.picture
                 || null,
+              google_id: providerId,
             })
 
           if (insertError) {
