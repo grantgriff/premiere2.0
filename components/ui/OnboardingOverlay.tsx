@@ -8,7 +8,7 @@ interface Step {
   target: string // data-onboarding attribute value
   title: string
   description: string
-  position: 'right' | 'left' | 'top' | 'bottom'
+  preferredSide: 'right' | 'left' | 'top' | 'bottom'
 }
 
 const STEPS: Step[] = [
@@ -16,27 +16,33 @@ const STEPS: Step[] = [
     target: 'new-button',
     title: 'Create Clips & Movies',
     description: 'Start a new clip to generate a single video, or create a movie to stitch multiple clips into a sequence.',
-    position: 'right',
+    preferredSide: 'right',
   },
   {
     target: 'model-selection',
     title: 'Pick a Model & Duration',
     description: 'Choose an AI model (try Veo 3.1 for best quality) and set your clip duration. Select multiple models to compare outputs side-by-side.',
-    position: 'left',
+    preferredSide: 'left',
   },
   {
     target: 'character-button',
     title: 'Create & Tag Characters',
     description: 'Upload a character photo, then tag them with @ in your prompt to keep a consistent look across clips. Veo 3.1 supports image references — other models use a text description.',
-    position: 'left',
+    preferredSide: 'left',
   },
   {
     target: 'generate-button',
     title: 'Generate Your Video',
     description: 'Type a prompt describing your scene and hit Generate. Your video will appear in the center panel when ready.',
-    position: 'left',
+    preferredSide: 'top',
   },
 ]
+
+const TOOLTIP_WIDTH = 300
+const TOOLTIP_HEIGHT_EST = 180 // rough estimate for clamping
+const GAP = 16
+const PAD = 8
+const VIEWPORT_MARGIN = 16
 
 export function OnboardingOverlay() {
   const [currentStep, setCurrentStep] = useState(0)
@@ -45,15 +51,12 @@ export function OnboardingOverlay() {
   const [highlightStyle, setHighlightStyle] = useState<React.CSSProperties>({})
 
   useEffect(() => {
-    // Check if user has already completed onboarding
     if (localStorage.getItem(ONBOARDING_KEY)) return
-
-    // Small delay so the DOM is painted
     const timer = setTimeout(() => setIsVisible(true), 800)
     return () => clearTimeout(timer)
   }, [])
 
-  const positionTooltip = useCallback(() => {
+  const positionElements = useCallback(() => {
     if (!isVisible) return
 
     const step = STEPS[currentStep]
@@ -61,51 +64,83 @@ export function OnboardingOverlay() {
     if (!el) return
 
     const rect = el.getBoundingClientRect()
-    const pad = 8
+    const vw = window.innerWidth
+    const vh = window.innerHeight
 
     // Highlight rect
     setHighlightStyle({
-      top: rect.top - pad,
-      left: rect.left - pad,
-      width: rect.width + pad * 2,
-      height: rect.height + pad * 2,
+      top: rect.top - PAD,
+      left: rect.left - PAD,
+      width: rect.width + PAD * 2,
+      height: rect.height + PAD * 2,
     })
 
-    // Tooltip positioning
-    const tooltip: React.CSSProperties = {}
-    const tooltipWidth = 300
+    // Calculate best tooltip position — try preferred side first, then fallback
+    let top = 0
+    let left = 0
 
-    switch (step.position) {
+    const fitRight = rect.right + GAP + TOOLTIP_WIDTH + VIEWPORT_MARGIN < vw
+    const fitLeft = rect.left - GAP - TOOLTIP_WIDTH - VIEWPORT_MARGIN > 0
+    const fitBelow = rect.bottom + GAP + TOOLTIP_HEIGHT_EST + VIEWPORT_MARGIN < vh
+    const fitAbove = rect.top - GAP - TOOLTIP_HEIGHT_EST - VIEWPORT_MARGIN > 0
+
+    const placeRight = () => {
+      left = rect.right + GAP
+      top = rect.top
+    }
+    const placeLeft = () => {
+      left = rect.left - GAP - TOOLTIP_WIDTH
+      top = rect.top
+    }
+    const placeBelow = () => {
+      left = rect.left + rect.width / 2 - TOOLTIP_WIDTH / 2
+      top = rect.bottom + GAP
+    }
+    const placeAbove = () => {
+      left = rect.left + rect.width / 2 - TOOLTIP_WIDTH / 2
+      top = rect.top - GAP - TOOLTIP_HEIGHT_EST
+    }
+
+    // Try preferred side, then try alternatives
+    switch (step.preferredSide) {
       case 'right':
-        tooltip.top = rect.top
-        tooltip.left = rect.right + pad + 16
+        if (fitRight) placeRight()
+        else if (fitLeft) placeLeft()
+        else if (fitBelow) placeBelow()
+        else placeAbove()
         break
       case 'left':
-        tooltip.top = rect.top
-        tooltip.left = rect.left - pad - 16 - tooltipWidth
+        if (fitLeft) placeLeft()
+        else if (fitRight) placeRight()
+        else if (fitBelow) placeBelow()
+        else placeAbove()
         break
       case 'bottom':
-        tooltip.top = rect.bottom + pad + 16
-        tooltip.left = rect.left + rect.width / 2 - tooltipWidth / 2
+        if (fitBelow) placeBelow()
+        else if (fitAbove) placeAbove()
+        else if (fitRight) placeRight()
+        else placeLeft()
         break
       case 'top':
-        tooltip.top = rect.top - pad - 16 - 120
-        tooltip.left = rect.left + rect.width / 2 - tooltipWidth / 2
+        if (fitAbove) placeAbove()
+        else if (fitBelow) placeBelow()
+        else if (fitLeft) placeLeft()
+        else placeRight()
         break
     }
 
     // Clamp to viewport
-    if ((tooltip.left as number) < 16) tooltip.left = 16
-    if ((tooltip.top as number) < 16) tooltip.top = 16
+    left = Math.max(VIEWPORT_MARGIN, Math.min(left, vw - TOOLTIP_WIDTH - VIEWPORT_MARGIN))
+    top = Math.max(VIEWPORT_MARGIN, Math.min(top, vh - TOOLTIP_HEIGHT_EST - VIEWPORT_MARGIN))
 
-    setTooltipStyle(tooltip)
+    setTooltipStyle({ top, left })
   }, [isVisible, currentStep])
 
   useEffect(() => {
-    positionTooltip()
-    window.addEventListener('resize', positionTooltip)
-    return () => window.removeEventListener('resize', positionTooltip)
-  }, [positionTooltip])
+    positionElements()
+    window.addEventListener('resize', positionElements)
+    return () => window.removeEventListener('resize', positionElements)
+  }, [positionElements])
 
   const handleNext = () => {
     if (currentStep < STEPS.length - 1) {
@@ -126,16 +161,17 @@ export function OnboardingOverlay() {
 
   return (
     <div className="fixed inset-0 z-[100]" onClick={handleDismiss}>
-      {/* Dark overlay with cutout */}
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.65)' }} />
+      {/* Lighter overlay — lets the UI show through */}
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.45)' }} />
 
-      {/* Highlight cutout */}
+      {/* Spotlight highlight around target element */}
       <div
-        className="absolute rounded-lg ring-2 ring-accent ring-offset-2 ring-offset-transparent transition-all duration-300 ease-out"
+        className="absolute rounded-lg transition-all duration-300 ease-out"
         style={{
           ...highlightStyle,
-          boxShadow: '0 0 0 9999px rgba(0,0,0,0.65)',
+          boxShadow: '0 0 0 9999px rgba(0,0,0,0.45), 0 0 24px 4px rgba(139,115,64,0.4)',
           background: 'transparent',
+          border: '2px solid rgba(139,115,64,0.8)',
           zIndex: 101,
           pointerEvents: 'none',
         }}
