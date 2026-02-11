@@ -248,40 +248,42 @@ export function MovieTimeline() {
   }
 
   return (
-    <div className="h-40 border-t border-border bg-background-secondary flex items-center px-4 gap-4">
-      {/* Timeline header */}
-      <div className="flex flex-col items-center justify-center px-4 border-r border-border h-full min-w-[140px]">
-        {isEditingTitle ? (
-          <input
-            type="text"
-            value={editingTitle}
-            onChange={(e) => setEditingTitle(e.target.value)}
-            onBlur={handleSaveTitle}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                handleSaveTitle()
-              } else if (e.key === 'Escape') {
-                setIsEditingTitle(false)
-              }
-            }}
-            autoFocus
-            className="text-sm font-medium text-foreground mb-1 px-2 py-1 bg-background border border-accent rounded w-full text-center"
-          />
-        ) : (
-          <div
-            onClick={handleStartEditingTitle}
-            className="text-sm font-medium text-foreground mb-1 cursor-pointer hover:text-accent transition-colors"
-          >
-            {activeMovie.title}
-          </div>
-        )}
-        <div className="text-xs text-foreground-secondary mb-2">
-          {activeMovie.clips.length} clip{activeMovie.clips.length !== 1 ? 's' : ''}
+    <div className="border-t border-border bg-background-secondary p-3 sm:p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Film className="w-4 h-4 sm:w-5 sm:h-5 text-accent flex-shrink-0" />
+          {isEditingTitle ? (
+            <input
+              type="text"
+              value={editingTitle}
+              onChange={(e) => setEditingTitle(e.target.value)}
+              onBlur={handleSaveTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSaveTitle()
+                } else if (e.key === 'Escape') {
+                  setIsEditingTitle(false)
+                }
+              }}
+              autoFocus
+              className="text-sm sm:text-base font-semibold text-foreground px-2 py-1 bg-background border border-accent rounded truncate"
+            />
+          ) : (
+            <h3
+              onClick={handleStartEditingTitle}
+              className="text-sm sm:text-base font-semibold cursor-pointer hover:text-accent transition-colors truncate"
+            >
+              {activeMovie.title}
+            </h3>
+          )}
+          <span className="text-xs text-foreground-secondary hidden sm:inline">
+            ({activeMovie.clips.length} clip{activeMovie.clips.length !== 1 ? 's' : ''})
+          </span>
         </div>
 
-        {/* Play All & Export buttons */}
+        {/* Action buttons - responsive */}
         {activeMovie.clips.length > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <button
               onClick={() => {
                 const playlistVideos = activeMovie.clips
@@ -302,24 +304,25 @@ export function MovieTimeline() {
                   setMoviePlaylist(playlistVideos, 0)
                 }
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-foreground/10 hover:bg-foreground/20 text-foreground text-xs font-medium transition-colors"
+              className="btn-secondary text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-2 flex items-center gap-1"
             >
-              <Play className="w-3.5 h-3.5" />
-              Play All
+              <Play className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Play All</span>
             </button>
             <button
               onClick={() => setShowExportDialog(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent hover:bg-accent/90 text-white text-xs font-medium transition-colors"
+              className="btn-primary text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-2 flex items-center gap-1"
             >
-              <Download className="w-3.5 h-3.5" />
-              Export
+              <Download className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Export</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* Clips carousel */}
-      <div className="flex-1 overflow-x-auto flex items-center gap-3 py-4">
+      {/* Horizontal scrolling clip timeline */}
+      <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
+        <div className="flex gap-2 sm:gap-3 pb-2">
         {activeMovie.clips.map((clip, index) => {
           const isPlaying = playingClipId === clip.id
           const isDragging = draggedIndex === index
@@ -335,7 +338,7 @@ export function MovieTimeline() {
               onDrop={(e) => handleDrop(e, index)}
               onDragEnd={handleDragEnd}
               onClick={() => handleClickClip(clip, index)}
-              className={`relative group flex-shrink-0 w-40 h-24 rounded-lg overflow-hidden bg-background border-2 transition-all cursor-pointer ${
+              className={`relative group flex-shrink-0 w-24 sm:w-32 md:w-40 rounded-lg overflow-hidden bg-background border-2 transition-all cursor-pointer ${
                 isDragging ? 'opacity-50 scale-95' : ''
               } ${
                 isDragOver ? 'border-accent scale-105' : 'border-border hover:border-accent'
