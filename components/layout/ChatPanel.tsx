@@ -228,12 +228,15 @@ export function ChatPanel() {
 
     // Initialize trace steps
     const modelName = MODELS.find(m => m.id === selectedModel)?.name || selectedModel
+    const trackedName = multiModelMode
+      ? MODELS.find(m => m.id === selectedModels[0])?.name || selectedModels[0]
+      : modelName
     const hasChars = selectedCharacterIds.length > 0
     const initialSteps: TraceStep[] = [
       { id: 'enhance', label: 'Enhancing prompt', detail: 'Rewriting for optimal video generation...', icon: 'enhance', status: 'active' },
       ...(hasChars ? [{ id: 'characters', label: 'Resolving characters', detail: `Preparing ${selectedCharacterIds.length} character reference(s)`, icon: 'characters' as const, status: 'pending' as const }] : []),
-      { id: 'submit', label: `Submitting to ${multiModelMode ? `${selectedModels.length} models` : modelName}`, icon: 'submit', status: 'pending' },
-      { id: 'generate', label: 'Generating video', detail: `${selectedDuration}s clip`, icon: 'generate', status: 'pending' },
+      { id: 'submit', label: `Submitting to ${multiModelMode ? `${selectedModels.length} models` : trackedName}`, icon: 'submit', status: 'pending' },
+      { id: 'generate', label: multiModelMode ? `Generating video` : 'Generating video', detail: multiModelMode ? `Following ${trackedName} · ${selectedDuration}s clip` : `${selectedDuration}s clip`, icon: 'generate', status: 'pending' },
       { id: 'quality', label: 'Quality verification', icon: 'quality', status: 'pending' },
     ]
     setTraceSteps(initialSteps)
@@ -284,7 +287,7 @@ export function ChatPanel() {
         enhancedPrompt = `A cinematic shot of ${characterNames} ${prompt}. ${characterNames} is the main subject and central focus of this video. Match the exact appearance, facial features, hair, clothing, and style from the reference image provided. Keep ${characterNames}'s face clearly visible and recognizable throughout the video.`
       }
 
-      // Multi-model generation
+      // Multi-model generation — trace follows the first selected model
       if (multiModelMode) {
         if (selectedModels.length < 2 || selectedModels.length > 4) {
           setIsGenerating(false)
@@ -292,8 +295,12 @@ export function ChatPanel() {
           return
         }
 
-        updateStep('enhance', { status: 'completed', detail: 'Prompt optimized for all models', timestamp: new Date() })
-        if (hasChars) updateStep('characters', { status: 'completed', timestamp: new Date() })
+        const trackedModel = selectedModels[0]
+        const trackedModelName = MODELS.find(m => m.id === trackedModel)?.name || trackedModel
+        let submitMarkedComplete = false
+
+        updateStep('enhance', { status: 'completed', detail: `Prompt optimized for ${selectedModels.length} models`, timestamp: new Date() })
+        if (hasChars) updateStep('characters', { status: 'completed', detail: 'Character images prepared', timestamp: new Date() })
         updateStep('submit', { status: 'active', detail: `Sending to ${selectedModels.length} models simultaneously...` })
 
         const states = await startMultiModelGeneration(
@@ -302,12 +309,46 @@ export function ChatPanel() {
           (updatedStates) => {
             const generationsArray = Array.from(updatedStates.values())
             setMultiModelGenerations(generationsArray)
+
+            // Follow the tracked model's lifecycle for the trace
+            const tracked = updatedStates.get(trackedModel)
+            if (!tracked) return
+
+            if (tracked.status === 'processing' && !submitMarkedComplete) {
+              submitMarkedComplete = true
+              updateStep('submit', { status: 'completed', detail: `Jobs sent to ${selectedModels.length} models`, timestamp: new Date() })
+              updateStep('generate', { status: 'active', detail: `Following ${trackedModelName}... ${tracked.progress}%` })
+            } else if (tracked.status === 'processing') {
+              updateStep('generate', { detail: `Following ${trackedModelName}... ${tracked.progress}%` })
+            } else if (tracked.status === 'completed') {
+              updateStep('generate', { status: 'completed', detail: `${trackedModelName} finished`, timestamp: new Date() })
+              if (tracked.video?.isVerifying) {
+                updateStep('quality', { status: 'active', detail: `Verifying ${trackedModelName} output...` })
+              }
+              if (tracked.video && !tracked.video.isVerifying && tracked.video.qualityScore !== null) {
+                const score = tracked.video.qualityScore
+                const label = score >= 8 ? 'Excellent' : score >= 6 ? 'Good' : score >= 4 ? 'Fair' : 'Poor'
+                updateStep('quality', { status: 'completed', detail: `${trackedModelName}: ${score.toFixed(1)}/10 — ${label}`, timestamp: new Date() })
+              }
+            } else if (tracked.status === 'failed') {
+              if (!submitMarkedComplete) {
+                updateStep('submit', { status: 'failed', detail: tracked.error || 'Submission failed', timestamp: new Date() })
+              }
+              updateStep('generate', { status: 'failed', detail: `${trackedModelName}: ${tracked.error || 'Failed'}`, timestamp: new Date() })
+            }
           }
         )
 
-        updateStep('submit', { status: 'completed', timestamp: new Date() })
-        updateStep('generate', { status: 'completed', detail: 'All models finished', timestamp: new Date() })
-        updateStep('quality', { status: 'completed', detail: 'Verification complete', timestamp: new Date() })
+        // Finalize any steps still pending after all models done
+        const finalTracked = states.get(trackedModel)
+        if (finalTracked?.status === 'completed') {
+          updateStep('generate', { status: 'completed', detail: `${trackedModelName} finished`, timestamp: new Date() })
+          // If quality didn't get resolved via callback, mark complete
+          if (!finalTracked.video?.qualityScore) {
+            updateStep('quality', { status: 'completed', detail: 'Verification complete', timestamp: new Date() })
+          }
+        }
+
         setIsGenerating(false)
         setUploadedFiles([])
         setSelectedYouTubeVideos([])
