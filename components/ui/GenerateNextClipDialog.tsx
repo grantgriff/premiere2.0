@@ -80,8 +80,8 @@ export function GenerateNextClipDialog({
         prompt: prompt.trim(),
         model: selectedModel,
         duration: selectedDuration,
-        // Frame chaining parameters - Veo will use frame chaining mode
-        lastFrameUrl: previousClip.lastFrameUrl,
+        // Use previous clip's last frame as this video's first frame
+        firstFrameUrl: previousClip.lastFrameUrl,
       })
 
       if (!response.success || !response.videoId) {
