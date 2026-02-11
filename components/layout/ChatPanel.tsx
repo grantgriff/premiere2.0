@@ -97,6 +97,8 @@ export function ChatPanel() {
   const setUser = useAppStore((state) => state.setUser)
 
   const activeConversation = useActiveConversation()
+  const movies = useAppStore((state) => state.movies)
+  const activeMovieId = useAppStore((state) => state.activeMovieId)
 
   // Fetch video usage quota
   const fetchUsage = useCallback(async () => {
@@ -159,10 +161,10 @@ export function ChatPanel() {
     return () => window.removeEventListener('welcome-prompt-submit', handleWelcomeSubmit)
   }, [])
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages or trace steps change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [activeConversation?.messages])
+  }, [activeConversation?.messages, traceSteps])
 
   // Auto-select valid duration when model changes
   useEffect(() => {
@@ -200,11 +202,16 @@ export function ChatPanel() {
     }
   }, [selectedModel])
 
-  // Clear trace when switching conversations
+  // Clear trace when user manually switches conversations (not during generation)
+  const prevConvIdRef = useRef<string | null>(null)
   useEffect(() => {
-    setTraceSteps([])
-    setCurrentPrompt('')
-  }, [activeConversationId])
+    // Only clear if we're NOT generating (to avoid clearing during new conv creation)
+    if (!isGenerating && activeConversationId !== prevConvIdRef.current) {
+      setTraceSteps([])
+      setCurrentPrompt('')
+    }
+    prevConvIdRef.current = activeConversationId
+  }, [activeConversationId, isGenerating])
 
   // Helper to update a single trace step by id
   const updateStep = (stepId: string, updates: Partial<TraceStep>) => {
@@ -221,14 +228,28 @@ export function ChatPanel() {
     setIsGenerating(true)
     setGenerationProgress(0)
 
-    // Initialize trace steps
+    // Check for scene continuity (last frame from active movie)
     const modelName = MODELS.find(m => m.id === selectedModel)?.name || selectedModel
+    const trackedName = multiModelMode
+      ? MODELS.find(m => m.id === selectedModels[0])?.name || selectedModels[0]
+      : modelName
     const hasChars = selectedCharacterIds.length > 0
+    let hasMovieContinuity = false
+    if (activeMovieId) {
+      const activeMovie = movies.find(m => m.id === activeMovieId)
+      if (activeMovie && activeMovie.clips.length > 0) {
+        const lastClip = activeMovie.clips.sort((a, b) => a.position - b.position)[activeMovie.clips.length - 1]
+        hasMovieContinuity = !!lastClip?.lastFrameUrl
+      }
+    }
+
+    // Initialize trace steps
     const initialSteps: TraceStep[] = [
       { id: 'enhance', label: 'Enhancing prompt', detail: 'Rewriting for optimal video generation...', icon: 'enhance', status: 'active' },
       ...(hasChars ? [{ id: 'characters', label: 'Resolving characters', detail: `Preparing ${selectedCharacterIds.length} character reference(s)`, icon: 'characters' as const, status: 'pending' as const }] : []),
-      { id: 'submit', label: `Submitting to ${multiModelMode ? `${selectedModels.length} models` : modelName}`, icon: 'submit', status: 'pending' },
-      { id: 'generate', label: 'Generating video', detail: `${selectedDuration}s clip`, icon: 'generate', status: 'pending' },
+      ...(hasMovieContinuity ? [{ id: 'continuity', label: 'Scene continuity', detail: 'Using last frame from previous scene', icon: 'continuity' as const, status: 'pending' as const }] : []),
+      { id: 'submit', label: `Submitting to ${multiModelMode ? `${selectedModels.length} models` : trackedName}`, icon: 'submit', status: 'pending' },
+      { id: 'generate', label: 'Generating video', detail: multiModelMode ? `Following ${trackedName} · ${selectedDuration}s clip` : `${selectedDuration}s clip`, icon: 'generate', status: 'pending' },
       { id: 'quality', label: 'Quality verification', icon: 'quality', status: 'pending' },
     ]
     setTraceSteps(initialSteps)
@@ -279,7 +300,20 @@ export function ChatPanel() {
         enhancedPrompt = `A cinematic shot of ${characterNames} ${prompt}. ${characterNames} is the main subject and central focus of this video. Match the exact appearance, facial features, hair, clothing, and style from the reference image provided. Keep ${characterNames}'s face clearly visible and recognizable throughout the video.`
       }
 
-      // Multi-model generation
+      // Resolve scene continuity — if active movie has clips, use last frame as first frame
+      let continuityFrameUrl: string | undefined
+      if (activeMovieId) {
+        const activeMovie = movies.find(m => m.id === activeMovieId)
+        if (activeMovie && activeMovie.clips.length > 0) {
+          const lastClip = activeMovie.clips.sort((a, b) => a.position - b.position)[activeMovie.clips.length - 1]
+          if (lastClip?.lastFrameUrl) {
+            continuityFrameUrl = lastClip.lastFrameUrl
+            updateStep('continuity', { status: 'completed', detail: `Linked to scene ${lastClip.position + 1} last frame`, timestamp: new Date() })
+          }
+        }
+      }
+
+      // Multi-model generation — trace follows the first selected model
       if (multiModelMode) {
         if (selectedModels.length < 2 || selectedModels.length > 4) {
           setIsGenerating(false)
@@ -287,8 +321,12 @@ export function ChatPanel() {
           return
         }
 
-        updateStep('enhance', { status: 'completed', detail: 'Prompt optimized for all models', timestamp: new Date() })
-        if (hasChars) updateStep('characters', { status: 'completed', timestamp: new Date() })
+        const trackedModel = selectedModels[0]
+        const trackedModelName = MODELS.find(m => m.id === trackedModel)?.name || trackedModel
+        let submitMarkedComplete = false
+
+        updateStep('enhance', { status: 'completed', detail: `Prompt optimized for ${selectedModels.length} models`, timestamp: new Date() })
+        if (hasChars) updateStep('characters', { status: 'completed', detail: 'Character images prepared', timestamp: new Date() })
         updateStep('submit', { status: 'active', detail: `Sending to ${selectedModels.length} models simultaneously...` })
 
         const states = await startMultiModelGeneration(
@@ -297,12 +335,47 @@ export function ChatPanel() {
           (updatedStates) => {
             const generationsArray = Array.from(updatedStates.values())
             setMultiModelGenerations(generationsArray)
-          }
+
+            // Follow the tracked model's lifecycle for the trace
+            const tracked = updatedStates.get(trackedModel)
+            if (!tracked) return
+
+            if (tracked.status === 'processing' && !submitMarkedComplete) {
+              submitMarkedComplete = true
+              updateStep('submit', { status: 'completed', detail: `Jobs sent to ${selectedModels.length} models`, timestamp: new Date() })
+              updateStep('generate', { status: 'active', detail: `Following ${trackedModelName}... ${tracked.progress}%` })
+            } else if (tracked.status === 'processing') {
+              updateStep('generate', { detail: `Following ${trackedModelName}... ${tracked.progress}%` })
+            } else if (tracked.status === 'completed') {
+              updateStep('generate', { status: 'completed', detail: `${trackedModelName} finished`, timestamp: new Date() })
+              if (tracked.video?.isVerifying) {
+                updateStep('quality', { status: 'active', detail: `Verifying ${trackedModelName} output...` })
+              }
+              if (tracked.video && !tracked.video.isVerifying && tracked.video.qualityScore !== null) {
+                const score = tracked.video.qualityScore
+                const label = score >= 8 ? 'Excellent' : score >= 6 ? 'Good' : score >= 4 ? 'Fair' : 'Poor'
+                updateStep('quality', { status: 'completed', detail: `${trackedModelName}: ${score.toFixed(1)}/10 — ${label}`, timestamp: new Date() })
+              }
+            } else if (tracked.status === 'failed') {
+              if (!submitMarkedComplete) {
+                updateStep('submit', { status: 'failed', detail: tracked.error || 'Submission failed', timestamp: new Date() })
+              }
+              updateStep('generate', { status: 'failed', detail: `${trackedModelName}: ${tracked.error || 'Failed'}`, timestamp: new Date() })
+            }
+          },
+          continuityFrameUrl,
         )
 
-        updateStep('submit', { status: 'completed', timestamp: new Date() })
-        updateStep('generate', { status: 'completed', detail: 'All models finished', timestamp: new Date() })
-        updateStep('quality', { status: 'completed', detail: 'Verification complete', timestamp: new Date() })
+        // Finalize any steps still pending after all models done
+        const finalTracked = states.get(trackedModel)
+        if (finalTracked?.status === 'completed') {
+          updateStep('generate', { status: 'completed', detail: `${trackedModelName} finished`, timestamp: new Date() })
+          // If quality didn't get resolved via callback, mark complete
+          if (!finalTracked.video?.qualityScore) {
+            updateStep('quality', { status: 'completed', detail: 'Verification complete', timestamp: new Date() })
+          }
+        }
+
         setIsGenerating(false)
         setUploadedFiles([])
         setSelectedYouTubeVideos([])
@@ -317,6 +390,7 @@ export function ChatPanel() {
         conversationId: convId,
         styleReferences,
         characterIds: selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
+        firstFrameUrl: continuityFrameUrl,
       })
 
       // Update enhance step with the actual enhanced prompt from server
@@ -519,7 +593,7 @@ export function ChatPanel() {
   return (
     <aside className="w-[360px] h-full flex flex-col panel border-l border-border">
       {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {!activeConversation || activeConversation.messages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center text-foreground-secondary">

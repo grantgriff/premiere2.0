@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Clock,
   Zap,
+  Film,
 } from 'lucide-react'
 
 export type TraceStepStatus = 'pending' | 'active' | 'completed' | 'failed'
@@ -24,7 +25,7 @@ export interface TraceStep {
   detail?: string
   expandedContent?: string
   status: TraceStepStatus
-  icon: 'prompt' | 'enhance' | 'characters' | 'submit' | 'generate' | 'quality' | 'complete' | 'error'
+  icon: 'prompt' | 'enhance' | 'characters' | 'submit' | 'generate' | 'quality' | 'complete' | 'error' | 'continuity'
   timestamp?: Date
 }
 
@@ -43,6 +44,7 @@ const ICON_MAP = {
   quality: Shield,
   complete: CheckCircle,
   error: XCircle,
+  continuity: Film,
 }
 
 function TraceStepRow({ step }: { step: TraceStep }) {
