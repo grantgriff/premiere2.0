@@ -25,6 +25,8 @@ export function MovieTimeline() {
   const conversations = useAppStore((state) => state.conversations)
   const addClipToMovie = useAppStore((state) => state.addClipToMovie)
   const setCurrentVideo = useAppStore((state) => state.setCurrentVideo)
+  const setActiveConversation = useAppStore((state) => state.setActiveConversation)
+  const setMultiModelMode = useAppStore((state) => state.setMultiModelMode)
 
   const handleRemoveClip = async (clipId: string) => {
     if (!activeMovie || !user?.id) return
@@ -111,25 +113,52 @@ export function MovieTimeline() {
   const handleClickClip = (clip: NonNullable<typeof activeMovie>['clips'][0], index: number) => {
     if (!activeMovie || !clip.video) return
 
-    // Build a playlist of all clips from the clicked index onward
-    const playlistVideos = activeMovie.clips
-      .filter(c => c.video?.videoUrl)
-      .map(c => ({
-        ...c.video!,
-        id: c.video!.id || c.id,
-        prompt: c.video!.prompt || '',
-        model: c.video!.model || 'veo3_1',
-        status: 'completed' as const,
+    const videoId = clip.video.id || clip.videoId
+
+    // Find the conversation containing this clip's video
+    const conv = conversations.find(c => c.videos.some(v => v.id === videoId))
+    if (conv) {
+      setActiveConversation(conv.id)
+      setMultiModelMode(false)
+
+      // Show this specific video in the main player
+      const video = conv.videos.find(v => v.id === videoId)
+      if (video && video.status === 'completed' && video.videoUrl) {
+        setCurrentVideo(video)
+      } else {
+        // Fallback: construct video from clip data
+        setCurrentVideo({
+          id: videoId,
+          prompt: clip.video.prompt || '',
+          model: clip.video.model || 'veo3_1',
+          duration: clip.video.duration || 4,
+          status: 'completed',
+          videoUrl: clip.video.videoUrl,
+          thumbnailUrl: clip.video.thumbnailUrl,
+          qualityScore: null,
+          qualityReport: null,
+          isVerifying: false,
+          createdAt: new Date(),
+          completedAt: new Date(),
+        })
+      }
+    } else {
+      // No conversation found — just show the video directly
+      setCurrentVideo({
+        id: videoId,
+        prompt: clip.video.prompt || '',
+        model: clip.video.model || 'veo3_1',
+        duration: clip.video.duration || 4,
+        status: 'completed',
+        videoUrl: clip.video.videoUrl,
+        thumbnailUrl: clip.video.thumbnailUrl,
         qualityScore: null,
         qualityReport: null,
         isVerifying: false,
         createdAt: new Date(),
         completedAt: new Date(),
-      }))
-
-    // Find the position of the clicked clip in the filtered playlist
-    const startIndex = playlistVideos.findIndex(v => v.id === (clip.video!.id || clip.id))
-    setMoviePlaylist(playlistVideos, startIndex >= 0 ? startIndex : 0)
+      })
+    }
   }
 
   const handleStartEditingTitle = () => {
