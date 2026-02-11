@@ -159,10 +159,10 @@ export function ChatPanel() {
     return () => window.removeEventListener('welcome-prompt-submit', handleWelcomeSubmit)
   }, [])
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages or trace steps change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [activeConversation?.messages])
+  }, [activeConversation?.messages, traceSteps])
 
   // Auto-select valid duration when model changes
   useEffect(() => {
@@ -200,11 +200,16 @@ export function ChatPanel() {
     }
   }, [selectedModel])
 
-  // Clear trace when switching conversations
+  // Clear trace when user manually switches conversations (not during generation)
+  const prevConvIdRef = useRef<string | null>(null)
   useEffect(() => {
-    setTraceSteps([])
-    setCurrentPrompt('')
-  }, [activeConversationId])
+    // Only clear if we're NOT generating (to avoid clearing during new conv creation)
+    if (!isGenerating && activeConversationId !== prevConvIdRef.current) {
+      setTraceSteps([])
+      setCurrentPrompt('')
+    }
+    prevConvIdRef.current = activeConversationId
+  }, [activeConversationId, isGenerating])
 
   // Helper to update a single trace step by id
   const updateStep = (stepId: string, updates: Partial<TraceStep>) => {
@@ -519,7 +524,7 @@ export function ChatPanel() {
   return (
     <aside className="w-[360px] h-full flex flex-col panel border-l border-border">
       {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {!activeConversation || activeConversation.messages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center text-foreground-secondary">
