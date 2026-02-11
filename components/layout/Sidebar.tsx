@@ -167,6 +167,32 @@ export function Sidebar() {
     }
   }
 
+  const handleSelectMovie = (movieId: string) => {
+    setActiveMovie(movieId)
+    setMultiModelMode(false)
+
+    // Find the most recent conversation associated with this movie's clips
+    const movie = movies.find(m => m.id === movieId)
+    if (movie && movie.clips.length > 0) {
+      // Get video IDs from clips, ordered by position (last = most recent)
+      const clipVideoIds = movie.clips
+        .sort((a, b) => b.position - a.position)
+        .map(c => c.videoId)
+
+      // Find the conversation containing the most recent clip's video
+      for (const videoId of clipVideoIds) {
+        const conv = conversations.find(c => c.videos.some(v => v.id === videoId))
+        if (conv) {
+          setActiveConversation(conv.id)
+          // Show the latest completed video from that conversation
+          const latestVideo = [...conv.videos].reverse().find(v => v.status === 'completed' && v.videoUrl)
+          setCurrentVideo(latestVideo || null)
+          return
+        }
+      }
+    }
+  }
+
   const handleDeleteConversation = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
 
@@ -431,7 +457,7 @@ export function Sidebar() {
                   }}
                 >
                   <button
-                    onClick={() => setActiveMovie(movie.id)}
+                    onClick={() => handleSelectMovie(movie.id)}
                     className={`w-full text-left px-3 py-2.5 rounded-lg flex items-start gap-2 transition-all group ${
                       activeMovieId === movie.id
                         ? 'bg-[#2a2a2a]'

@@ -211,6 +211,32 @@ export function MultiModelVideoPanel({ generations }: MultiModelVideoPanelProps)
           createdAt: new Date(clip.createdAt),
         })
         console.log('[MultiModelPanel] Added video to movie with frames:', movieId)
+
+        // Reload movies to get full clip data
+        try {
+          const moviesResponse = await fetch(`/api/movies?userId=${user.id}`)
+          if (moviesResponse.ok) {
+            const data = await moviesResponse.json()
+            const reloadedMovies = data.movies.map((m: any) => ({
+              ...m,
+              createdAt: new Date(m.createdAt),
+              updatedAt: new Date(m.updatedAt),
+              clips: (m.clips || []).map((c: any) => ({
+                ...c,
+                createdAt: new Date(c.createdAt),
+              }))
+            }))
+            useAppStore.getState().setMovies(reloadedMovies)
+          }
+        } catch {
+          // Non-critical — local state already updated
+        }
+
+        // Exit comparison → enlarge selected video → show movie timeline
+        useAppStore.getState().setCurrentVideo(selectedVideo)
+        useAppStore.getState().setActiveMovie(movieId)
+        useAppStore.getState().setMultiModelMode(false)
+
         setShowMovieSelector(false)
         setSelectedVideo(null)
       }
