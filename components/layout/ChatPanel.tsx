@@ -20,6 +20,7 @@ import { CharacterManager } from '@/components/ui/CharacterManager'
 import { YouTubeSearchPanel, YouTubeVideo } from '@/components/ui/YouTubeSearchPanel'
 import { uploadToStorage, STORAGE_BUCKETS } from '@/lib/supabase'
 import { startMultiModelGeneration } from '@/lib/multiModelGeneration'
+import { AgenticTrace, TraceStep } from '@/components/ui/AgenticTrace'
 
 interface UploadedFile {
   id: string
@@ -60,6 +61,8 @@ export function ChatPanel() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [videoUsage, setVideoUsage] = useState<{ remaining: number | null; maxVideos: number | null; isAdmin: boolean } | null>(null)
+  const [traceSteps, setTraceSteps] = useState<TraceStep[]>([])
+  const [currentPrompt, setCurrentPrompt] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null) as React.RefObject<HTMLTextAreaElement>
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -197,23 +200,44 @@ export function ChatPanel() {
     }
   }, [selectedModel])
 
+  // Clear trace when switching conversations
+  useEffect(() => {
+    setTraceSteps([])
+    setCurrentPrompt('')
+  }, [activeConversationId])
+
+  // Helper to update a single trace step by id
+  const updateStep = (stepId: string, updates: Partial<TraceStep>) => {
+    setTraceSteps(prev => prev.map(s => s.id === stepId ? { ...s, ...updates } : s))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isGenerating || !user) return
 
     const prompt = input.trim()
     setInput('')
+    setCurrentPrompt(prompt)
     setIsGenerating(true)
     setGenerationProgress(0)
+
+    // Initialize trace steps
+    const modelName = MODELS.find(m => m.id === selectedModel)?.name || selectedModel
+    const hasChars = selectedCharacterIds.length > 0
+    const initialSteps: TraceStep[] = [
+      { id: 'enhance', label: 'Enhancing prompt', detail: 'Rewriting for optimal video generation...', icon: 'enhance', status: 'active' },
+      ...(hasChars ? [{ id: 'characters', label: 'Resolving characters', detail: `Preparing ${selectedCharacterIds.length} character reference(s)`, icon: 'characters' as const, status: 'pending' as const }] : []),
+      { id: 'submit', label: `Submitting to ${multiModelMode ? `${selectedModels.length} models` : modelName}`, icon: 'submit', status: 'pending' },
+      { id: 'generate', label: 'Generating video', detail: `${selectedDuration}s clip`, icon: 'generate', status: 'pending' },
+      { id: 'quality', label: 'Quality verification', icon: 'quality', status: 'pending' },
+    ]
+    setTraceSteps(initialSteps)
 
     // Create or get conversation
     let convId = activeConversationId
     if (!convId) {
       const title = prompt.slice(0, 40) + (prompt.length > 40 ? '...' : '')
-
-      // Create in database first (userId extracted from session on server)
       const dbConversation = await createConversationApi(title)
-
       const newConv = {
         id: dbConversation?.id || generateId(),
         title,
@@ -227,15 +251,7 @@ export function ChatPanel() {
     }
 
     // Add user message
-    const userMessage = {
-      id: generateId(),
-      role: 'user' as const,
-      content: prompt,
-      timestamp: new Date(),
-    }
-    addMessage(convId, userMessage)
-
-    // Save user message to database
+    addMessage(convId, { id: generateId(), role: 'user' as const, content: prompt, timestamp: new Date() })
     createMessageApi(convId, 'user', prompt)
 
     try {
@@ -246,91 +262,54 @@ export function ChatPanel() {
         const path = `${user.id}/${generateId()}_${uploadedFile.file.name}`
         const url = await uploadToStorage(bucket, path, uploadedFile.file)
         if (url) {
-          uploadedUrls.push({
-            type: 'upload',
-            url,
-            title: uploadedFile.file.name,
-          })
+          uploadedUrls.push({ type: 'upload', url, title: uploadedFile.file.name })
         }
       }
 
-      // Build all style references
       const styleReferences: StyleReference[] = [
-        ...selectedYouTubeVideos.map(v => ({
-          type: 'youtube' as const,
-          url: v.url,
-          videoId: v.id,
-          title: v.title,
-        })),
+        ...selectedYouTubeVideos.map(v => ({ type: 'youtube' as const, url: v.url, videoId: v.id, title: v.title })),
         ...uploadedUrls,
       ]
 
       // Enhance prompt with character names when characters are selected
       let enhancedPrompt = prompt
-      if (selectedCharacterIds.length > 0) {
+      if (hasChars) {
         const selectedCharacters = characters.filter(c => selectedCharacterIds.includes(c.id))
         const characterNames = selectedCharacters.map(c => c.name).join(' and ')
-
-        // Build highly explicit character reference for AI models
-        // Make it crystal clear that this person should be the main subject
         enhancedPrompt = `A cinematic shot of ${characterNames} ${prompt}. ${characterNames} is the main subject and central focus of this video. Match the exact appearance, facial features, hair, clothing, and style from the reference image provided. Keep ${characterNames}'s face clearly visible and recognizable throughout the video.`
-
-        console.log(`[ChatPanel] Enhanced prompt with explicit character reference:`, enhancedPrompt)
       }
 
       // Multi-model generation
       if (multiModelMode) {
         if (selectedModels.length < 2 || selectedModels.length > 4) {
           setIsGenerating(false)
-          const errorMsg = 'Please select 2-4 models for multi-model generation'
-          addMessage(convId, {
-            id: generateId(),
-            role: 'assistant' as const,
-            content: errorMsg,
-            timestamp: new Date(),
-          })
-          createMessageApi(convId, 'assistant', errorMsg)
+          setTraceSteps(prev => prev.map(s => ({ ...s, status: 'failed' as const })))
           return
         }
 
-        // Start multi-model generation
+        updateStep('enhance', { status: 'completed', detail: 'Prompt optimized for all models', timestamp: new Date() })
+        if (hasChars) updateStep('characters', { status: 'completed', timestamp: new Date() })
+        updateStep('submit', { status: 'active', detail: `Sending to ${selectedModels.length} models simultaneously...` })
+
         const states = await startMultiModelGeneration(
-          selectedModels,
-          enhancedPrompt,
-          selectedDuration,
-          convId,
-          styleReferences,
+          selectedModels, enhancedPrompt, selectedDuration, convId, styleReferences,
           selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
           (updatedStates) => {
-            // Convert Map to array for store
             const generationsArray = Array.from(updatedStates.values())
             setMultiModelGenerations(generationsArray)
           }
         )
 
+        updateStep('submit', { status: 'completed', timestamp: new Date() })
+        updateStep('generate', { status: 'completed', detail: 'All models finished', timestamp: new Date() })
+        updateStep('quality', { status: 'completed', detail: 'Verification complete', timestamp: new Date() })
         setIsGenerating(false)
-
-        // Clear uploaded files after successful submission
         setUploadedFiles([])
         setSelectedYouTubeVideos([])
         return
       }
 
       // Single model generation
-      // Add assistant "generating" message for single-model
-      const generatingMessage = {
-        id: generateId(),
-        role: 'assistant' as const,
-        content: `Generating ${selectedDuration}s video with ${MODELS.find(m => m.id === selectedModel)?.name}...`,
-        timestamp: new Date(),
-      }
-      addMessage(convId, generatingMessage)
-
-      // Save generating message to database
-      createMessageApi(convId, 'assistant', generatingMessage.content)
-
-      // Start generation with all references
-      // Note: userId is now extracted from session cookie on the server
       const response = await startGeneration({
         prompt: enhancedPrompt,
         model: selectedModel,
@@ -340,182 +319,128 @@ export function ChatPanel() {
         characterIds: selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
       })
 
+      // Update enhance step with the actual enhanced prompt from server
+      if (response.enhancedPrompt) {
+        updateStep('enhance', {
+          status: 'completed',
+          detail: 'Prompt rewritten by Gemini',
+          expandedContent: response.enhancedPrompt,
+          timestamp: new Date(),
+        })
+      } else {
+        updateStep('enhance', { status: 'completed', detail: 'Using original prompt', timestamp: new Date() })
+      }
+
+      if (hasChars) {
+        updateStep('characters', { status: 'completed', detail: 'Character images prepared', timestamp: new Date() })
+      }
+
       if (!response.success || !response.videoId) {
         throw new Error(response.error || 'Failed to start generation')
       }
 
-      // Show warning if model API had issues
+      // Show warning
       if (response.warning) {
-        const warningContent = `Warning: ${response.warning}`
-        addMessage(convId, {
-          id: generateId(),
-          role: 'assistant' as const,
-          content: warningContent,
-          timestamp: new Date(),
-        })
-        createMessageApi(convId, 'assistant', warningContent)
+        updateStep('characters', { detail: `Warning: ${response.warning}` })
       }
 
-      // Create video entry (use enhanced prompt so user sees what was sent to AI)
+      updateStep('submit', { status: 'completed', detail: `Job submitted to ${modelName}`, timestamp: new Date() })
+      updateStep('generate', { status: 'active', detail: `Generating ${selectedDuration}s clip with ${modelName}...` })
+
+      // Create video entry
       const video = {
         id: response.videoId,
-        prompt: enhancedPrompt,
+        prompt: response.enhancedPrompt || enhancedPrompt,
         model: selectedModel,
         duration: selectedDuration,
         status: 'pending' as const,
-        videoUrl: null,
-        thumbnailUrl: null,
-        qualityScore: null,
-        qualityReport: null,
-        isVerifying: false,
-        createdAt: new Date(),
-        completedAt: null,
+        videoUrl: null, thumbnailUrl: null, qualityScore: null, qualityReport: null,
+        isVerifying: false, createdAt: new Date(), completedAt: null,
       }
       addVideo(convId, video)
 
+      // Save summary message to DB for conversation history
+      createMessageApi(convId, 'assistant', `Generating ${selectedDuration}s video with ${modelName}...`)
+
       // Poll for completion
       pollVideoStatus(response.videoId, (status: VideoStatusResponse) => {
-        // Update progress
         if (status.status === 'processing') {
           const currentProgress = useAppStore.getState().generationProgress
-          setGenerationProgress(Math.min(currentProgress + 10, 90))
+          const newProgress = Math.min(currentProgress + 10, 90)
+          setGenerationProgress(newProgress)
+          updateStep('generate', { detail: `Processing... ${newProgress}%` })
         }
 
-        // Update video in store
         updateVideo(convId!, response.videoId!, {
-          status: status.status,
-          videoUrl: status.videoUrl,
-          thumbnailUrl: status.thumbnailUrl,
-          qualityScore: status.qualityScore,
+          status: status.status, videoUrl: status.videoUrl,
+          thumbnailUrl: status.thumbnailUrl, qualityScore: status.qualityScore,
           completedAt: status.completedAt ? new Date(status.completedAt) : null,
         })
 
-        // Handle completion
         if (status.status === 'completed' && status.videoUrl) {
           setGenerationProgress(100)
-          setIsGenerating(false)
 
-          // Set current video with verifying state
+          updateStep('generate', { status: 'completed', detail: 'Video generated successfully', timestamp: new Date() })
+          updateStep('quality', { status: 'active', detail: 'Running quality analysis...' })
+
           const completedVideo = {
-            id: response.videoId!,
-            prompt: enhancedPrompt,
-            model: selectedModel,
-            duration: selectedDuration,
-            status: 'completed' as const,
-            videoUrl: status.videoUrl,
-            thumbnailUrl: status.thumbnailUrl,
-            qualityScore: null,
-            qualityReport: null,
-            isVerifying: true,
-            createdAt: new Date(),
-            completedAt: new Date(),
+            id: response.videoId!, prompt: response.enhancedPrompt || enhancedPrompt,
+            model: selectedModel, duration: selectedDuration,
+            status: 'completed' as const, videoUrl: status.videoUrl,
+            thumbnailUrl: status.thumbnailUrl, qualityScore: null, qualityReport: null,
+            isVerifying: true, createdAt: new Date(), completedAt: new Date(),
           }
           setCurrentVideo(completedVideo)
           updateVideo(convId!, response.videoId!, { isVerifying: true })
+          createMessageApi(convId!, 'assistant', 'Video ready!', response.videoId)
 
-          // Add initial completion message
-          const completionContent = 'Video ready! Running quality verification...'
-          addMessage(convId!, {
-            id: generateId(),
-            role: 'assistant' as const,
-            content: completionContent,
-            timestamp: new Date(),
-            videoId: response.videoId,
-          })
-          createMessageApi(convId!, 'assistant', completionContent, response.videoId)
-
-          // Run quality verification
           verifyVideoQuality(response.videoId!, status.videoUrl).then((verifyResult) => {
             if (verifyResult) {
               const qualityReport = verifyResult.report as QualityReport
+              updateVideo(convId!, response.videoId!, { qualityScore: verifyResult.qualityScore, qualityReport, isVerifying: false })
 
-              // Update video with quality results
-              updateVideo(convId!, response.videoId!, {
-                qualityScore: verifyResult.qualityScore,
-                qualityReport,
-                isVerifying: false,
-              })
-
-              // Update current video if still viewing
               const currentState = useAppStore.getState()
               const cv = currentState.currentVideo
               if (cv && cv.id === response.videoId) {
-                setCurrentVideo({
-                  id: cv.id,
-                  prompt: cv.prompt,
-                  model: cv.model,
-                  duration: cv.duration,
-                  status: cv.status,
-                  videoUrl: cv.videoUrl,
-                  thumbnailUrl: cv.thumbnailUrl,
-                  qualityScore: verifyResult.qualityScore,
-                  qualityReport,
-                  isVerifying: false,
-                  createdAt: cv.createdAt,
-                  completedAt: cv.completedAt,
-                })
+                setCurrentVideo({ ...cv, qualityScore: verifyResult.qualityScore, qualityReport, isVerifying: false })
               }
 
-              // Add quality result message
-              const qualityLabel = verifyResult.qualityScore >= 8 ? 'Excellent' :
-                                   verifyResult.qualityScore >= 6 ? 'Good' :
-                                   verifyResult.qualityScore >= 4 ? 'Fair' : 'Poor'
-              const qualityContent = `Quality verified: ${verifyResult.qualityScore.toFixed(1)}/10 (${qualityLabel})${verifyResult.hasHighSeverityIssues ? ' - Some issues detected' : ''}`
-              addMessage(convId!, {
-                id: generateId(),
-                role: 'assistant' as const,
-                content: qualityContent,
+              const qualityLabel = verifyResult.qualityScore >= 8 ? 'Excellent' : verifyResult.qualityScore >= 6 ? 'Good' : verifyResult.qualityScore >= 4 ? 'Fair' : 'Poor'
+              updateStep('quality', {
+                status: 'completed',
+                detail: `${verifyResult.qualityScore.toFixed(1)}/10 — ${qualityLabel}`,
                 timestamp: new Date(),
               })
-              createMessageApi(convId!, 'assistant', qualityContent)
+              createMessageApi(convId!, 'assistant', `Quality: ${verifyResult.qualityScore.toFixed(1)}/10 (${qualityLabel})`)
             } else {
-              // Verification failed
               updateVideo(convId!, response.videoId!, { isVerifying: false })
-              const currentState = useAppStore.getState()
-              const cv = currentState.currentVideo
-              if (cv && cv.id === response.videoId) {
-                setCurrentVideo({
-                  id: cv.id,
-                  prompt: cv.prompt,
-                  model: cv.model,
-                  duration: cv.duration,
-                  status: cv.status,
-                  videoUrl: cv.videoUrl,
-                  thumbnailUrl: cv.thumbnailUrl,
-                  qualityScore: cv.qualityScore,
-                  qualityReport: cv.qualityReport,
-                  isVerifying: false,
-                  createdAt: cv.createdAt,
-                  completedAt: cv.completedAt,
-                })
-              }
+              updateStep('quality', { status: 'completed', detail: 'Verification skipped', timestamp: new Date() })
             }
+            setIsGenerating(false)
           })
         } else if (status.status === 'failed') {
           setIsGenerating(false)
-          const failContent = `Generation failed: ${status.error || 'Unknown error'}`
-          addMessage(convId!, {
-            id: generateId(),
-            role: 'assistant' as const,
-            content: failContent,
-            timestamp: new Date(),
-          })
-          createMessageApi(convId!, 'assistant', failContent)
+          updateStep('generate', { status: 'failed', detail: status.error || 'Generation failed', timestamp: new Date() })
+          updateStep('quality', { status: 'failed' })
+          createMessageApi(convId!, 'assistant', `Failed: ${status.error || 'Unknown error'}`)
         }
       })
-      // Clear uploaded files after successful submission
+
       setUploadedFiles([])
       setSelectedYouTubeVideos([])
     } catch (error) {
       setIsGenerating(false)
-      const errorContent = `Error: ${error instanceof Error ? error.message : 'Failed to generate video'}`
-      addMessage(convId, {
-        id: generateId(),
-        role: 'assistant' as const,
-        content: errorContent,
-        timestamp: new Date(),
+      const errMsg = error instanceof Error ? error.message : 'Failed to generate video'
+      // Mark the first pending/active step as failed
+      setTraceSteps(prev => {
+        const updated = [...prev]
+        const activeIdx = updated.findIndex(s => s.status === 'active' || s.status === 'pending')
+        if (activeIdx >= 0) {
+          updated[activeIdx] = { ...updated[activeIdx], status: 'failed', detail: errMsg }
+        }
+        return updated
       })
-      createMessageApi(convId, 'assistant', errorContent)
+      createMessageApi(convId, 'assistant', `Error: ${errMsg}`)
     }
   }
 
@@ -619,31 +544,12 @@ export function ChatPanel() {
           ))
         )}
 
-        {isGenerating && multiModelMode && (
-          <div className="text-center py-4">
-            <p className="text-sm text-foreground-secondary italic">Generating...</p>
-          </div>
-        )}
-
-        {isGenerating && !multiModelMode && (
-          <div className="message-assistant">
-            <div className="flex items-center gap-2 mb-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Generating video...</span>
-            </div>
-            <div className="w-full bg-background rounded-full h-2">
-              <div
-                className="bg-accent h-2 rounded-full transition-all duration-300"
-                style={{ width: `${generationProgress}%` }}
-              />
-            </div>
-            <p className="text-xs text-foreground-secondary mt-1">
-              {generationProgress < 30 && 'Starting generation...'}
-              {generationProgress >= 30 && generationProgress < 70 && 'Processing frames...'}
-              {generationProgress >= 70 && generationProgress < 100 && 'Finalizing...'}
-              {generationProgress === 100 && 'Complete!'}
-            </p>
-          </div>
+        {traceSteps.length > 0 && (
+          <AgenticTrace
+            originalPrompt={currentPrompt}
+            steps={traceSteps}
+            isActive={isGenerating}
+          />
         )}
 
         <div ref={messagesEndRef} />

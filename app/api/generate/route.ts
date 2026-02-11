@@ -424,6 +424,7 @@ export async function POST(request: NextRequest) {
       conversationId: convId,
       estimatedTime: modelInfo.estimatedTime,
       warning: characterWarning || undefined,
+      enhancedPrompt: enhancementResult.success ? promptToUse : undefined,
     })
   } catch (error) {
     // Log full error details for debugging

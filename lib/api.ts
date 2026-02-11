@@ -32,6 +32,7 @@ export interface GenerationResponse {
   creditsRemaining?: number
   error?: string
   warning?: string
+  enhancedPrompt?: string
 }
 
 export interface VideoStatusResponse {
