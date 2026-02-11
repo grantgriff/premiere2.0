@@ -239,9 +239,24 @@ export function MultiModelVideoPanel({ generations }: MultiModelVideoPanelProps)
       ? 'grid-cols-3'
       : 'grid-cols-2'
 
+  const setMultiModelMode = useAppStore((state) => state.setMultiModelMode)
+
   return (
     <>
       <main className="flex-1 min-w-[600px] flex flex-col bg-background border-r border-border">
+        {/* Header with exit button */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-border">
+          <div className="text-sm font-medium text-foreground-secondary">
+            Model Comparison ({generations.length} models)
+          </div>
+          <button
+            onClick={() => setMultiModelMode(false)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-foreground-secondary hover:text-foreground hover:bg-background-secondary transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+            Exit Comparison
+          </button>
+        </div>
         <div className="flex-1 p-6">
           <div className={`grid ${gridClass} gap-4 h-full`}>
             {generations.map((gen) => (

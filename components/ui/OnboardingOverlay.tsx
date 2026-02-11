@@ -22,13 +22,13 @@ const STEPS: Step[] = [
     target: 'model-selection',
     title: 'Pick a Model & Duration',
     description: 'Choose an AI model (try Veo 3.1 for best quality) and set your clip duration. Select multiple models to compare outputs side-by-side.',
-    preferredSide: 'top',
+    preferredSide: 'bottom',
   },
   {
     target: 'character-button',
     title: 'Create & Tag Characters',
     description: 'Upload a character photo, then tag them with @ in your prompt to keep a consistent look across clips. Veo 3.1 supports image references — other models use a text description.',
-    preferredSide: 'top',
+    preferredSide: 'bottom',
   },
   {
     target: 'generate-button',

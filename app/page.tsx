@@ -24,6 +24,7 @@ export default function Home() {
   const activeMovie = useActiveMovie()
   const activeConversationId = useAppStore((state) => state.activeConversationId)
   const isGenerating = useAppStore((state) => state.isGenerating)
+  const moviePlaylist = useAppStore((state) => state.moviePlaylist)
 
   // Load characters and movies on app initialization
   useEffect(() => {
@@ -62,13 +63,30 @@ export default function Home() {
         const data = await response.json()
         if (data.movies) {
           setMovies(data.movies.map((m: Record<string, unknown>) => ({
-            ...m,
-            createdAt: new Date(m.createdAt as string),
-            updatedAt: new Date(m.updatedAt as string),
-            clips: (m.clips as any[])?.map((c: Record<string, unknown>) => ({
-              ...c,
-              createdAt: new Date(c.createdAt as string),
-            })) || []
+            id: m.id,
+            userId: m.user_id ?? m.userId,
+            title: m.title,
+            description: m.description ?? null,
+            thumbnailUrl: m.thumbnail_url ?? m.thumbnailUrl ?? null,
+            createdAt: new Date((m.created_at ?? m.createdAt) as string),
+            updatedAt: new Date((m.updated_at ?? m.updatedAt) as string),
+            clips: ((m.clips as any[]) || []).map((c: any) => ({
+              id: c.id,
+              movieId: c.movie_id ?? c.movieId,
+              videoId: c.video_id ?? c.videoId,
+              position: c.position,
+              firstFrameUrl: c.first_frame_url ?? c.firstFrameUrl ?? null,
+              lastFrameUrl: c.last_frame_url ?? c.lastFrameUrl ?? null,
+              createdAt: new Date((c.created_at ?? c.createdAt) as string),
+              video: c.video ? {
+                id: c.video.id,
+                videoUrl: c.video.video_url ?? c.video.videoUrl ?? null,
+                thumbnailUrl: c.video.thumbnail_url ?? c.video.thumbnailUrl ?? null,
+                duration: c.video.duration,
+                prompt: c.video.prompt,
+                model: c.video.model,
+              } : undefined,
+            })),
           })))
           console.log(`[App] Loaded ${data.movies.length} movie(s) on initialization`)
         }
@@ -174,7 +192,10 @@ export default function Home() {
             <>
               <div className="flex-1 flex overflow-hidden">
                 {/* Center Panel */}
-                {!activeConversationId && !isGenerating ? (
+                {moviePlaylist.length > 0 ? (
+                  /* Movie playlist active — always show VideoPanel */
+                  <VideoPanel />
+                ) : !activeConversationId && !isGenerating ? (
                   /* Welcome state - centered prompt bar */
                   <div className="flex-1 flex items-center justify-center bg-background">
                     <WelcomePromptBar onSubmit={(prompt, uploadedFiles) => {
@@ -189,8 +210,8 @@ export default function Home() {
                   <VideoPanel />
                 )}
 
-                {/* Right Sidebar - 360px fixed (hidden off-screen in welcome state so it stays mounted) */}
-                <div className={!activeConversationId && !isGenerating ? 'sr-only' : ''}>
+                {/* Right Sidebar - 360px fixed (hidden when welcome state or movie playlist is playing) */}
+                <div className={(!activeConversationId && !isGenerating) || moviePlaylist.length > 0 ? 'sr-only' : ''}>
                   <ChatPanel />
                 </div>
               </div>
