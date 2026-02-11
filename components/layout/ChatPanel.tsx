@@ -97,6 +97,8 @@ export function ChatPanel() {
   const setUser = useAppStore((state) => state.setUser)
 
   const activeConversation = useActiveConversation()
+  const movies = useAppStore((state) => state.movies)
+  const activeMovieId = useAppStore((state) => state.activeMovieId)
 
   // Fetch video usage quota
   const fetchUsage = useCallback(async () => {
@@ -226,17 +228,28 @@ export function ChatPanel() {
     setIsGenerating(true)
     setGenerationProgress(0)
 
-    // Initialize trace steps
+    // Check for scene continuity (last frame from active movie)
     const modelName = MODELS.find(m => m.id === selectedModel)?.name || selectedModel
     const trackedName = multiModelMode
       ? MODELS.find(m => m.id === selectedModels[0])?.name || selectedModels[0]
       : modelName
     const hasChars = selectedCharacterIds.length > 0
+    let hasMovieContinuity = false
+    if (activeMovieId) {
+      const activeMovie = movies.find(m => m.id === activeMovieId)
+      if (activeMovie && activeMovie.clips.length > 0) {
+        const lastClip = activeMovie.clips.sort((a, b) => a.position - b.position)[activeMovie.clips.length - 1]
+        hasMovieContinuity = !!lastClip?.lastFrameUrl
+      }
+    }
+
+    // Initialize trace steps
     const initialSteps: TraceStep[] = [
       { id: 'enhance', label: 'Enhancing prompt', detail: 'Rewriting for optimal video generation...', icon: 'enhance', status: 'active' },
       ...(hasChars ? [{ id: 'characters', label: 'Resolving characters', detail: `Preparing ${selectedCharacterIds.length} character reference(s)`, icon: 'characters' as const, status: 'pending' as const }] : []),
+      ...(hasMovieContinuity ? [{ id: 'continuity', label: 'Scene continuity', detail: 'Using last frame from previous scene', icon: 'continuity' as const, status: 'pending' as const }] : []),
       { id: 'submit', label: `Submitting to ${multiModelMode ? `${selectedModels.length} models` : trackedName}`, icon: 'submit', status: 'pending' },
-      { id: 'generate', label: multiModelMode ? `Generating video` : 'Generating video', detail: multiModelMode ? `Following ${trackedName} · ${selectedDuration}s clip` : `${selectedDuration}s clip`, icon: 'generate', status: 'pending' },
+      { id: 'generate', label: 'Generating video', detail: multiModelMode ? `Following ${trackedName} · ${selectedDuration}s clip` : `${selectedDuration}s clip`, icon: 'generate', status: 'pending' },
       { id: 'quality', label: 'Quality verification', icon: 'quality', status: 'pending' },
     ]
     setTraceSteps(initialSteps)
@@ -285,6 +298,19 @@ export function ChatPanel() {
         const selectedCharacters = characters.filter(c => selectedCharacterIds.includes(c.id))
         const characterNames = selectedCharacters.map(c => c.name).join(' and ')
         enhancedPrompt = `A cinematic shot of ${characterNames} ${prompt}. ${characterNames} is the main subject and central focus of this video. Match the exact appearance, facial features, hair, clothing, and style from the reference image provided. Keep ${characterNames}'s face clearly visible and recognizable throughout the video.`
+      }
+
+      // Resolve scene continuity — if active movie has clips, use last frame as first frame
+      let continuityFrameUrl: string | undefined
+      if (activeMovieId) {
+        const activeMovie = movies.find(m => m.id === activeMovieId)
+        if (activeMovie && activeMovie.clips.length > 0) {
+          const lastClip = activeMovie.clips.sort((a, b) => a.position - b.position)[activeMovie.clips.length - 1]
+          if (lastClip?.lastFrameUrl) {
+            continuityFrameUrl = lastClip.lastFrameUrl
+            updateStep('continuity', { status: 'completed', detail: `Linked to scene ${lastClip.position + 1} last frame`, timestamp: new Date() })
+          }
+        }
       }
 
       // Multi-model generation — trace follows the first selected model
@@ -336,7 +362,8 @@ export function ChatPanel() {
               }
               updateStep('generate', { status: 'failed', detail: `${trackedModelName}: ${tracked.error || 'Failed'}`, timestamp: new Date() })
             }
-          }
+          },
+          continuityFrameUrl,
         )
 
         // Finalize any steps still pending after all models done
@@ -363,6 +390,7 @@ export function ChatPanel() {
         conversationId: convId,
         styleReferences,
         characterIds: selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
+        firstFrameUrl: continuityFrameUrl,
       })
 
       // Update enhance step with the actual enhanced prompt from server

@@ -45,7 +45,8 @@ export async function startMultiModelGeneration(
   conversationId: string,
   styleReferences: StyleReference[],
   characterIds?: string[],
-  onProgressUpdate?: (states: GenerationStateMap) => void
+  onProgressUpdate?: (states: GenerationStateMap) => void,
+  firstFrameUrl?: string,
 ): Promise<GenerationStateMap> {
   const states: GenerationStateMap = new Map()
 
@@ -82,6 +83,7 @@ export async function startMultiModelGeneration(
         conversationId,
         styleReferences,
         characterIds, // Backend will handle Veo vs non-Veo character handling
+        firstFrameUrl: model === 'veo3_1' ? firstFrameUrl : undefined,
       })
 
       if (!response.success || !response.videoId) {
