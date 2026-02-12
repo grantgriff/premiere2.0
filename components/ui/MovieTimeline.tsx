@@ -452,6 +452,7 @@ export function MovieTimeline() {
           <span className="text-xs">Add Existing</span>
         </button>
       </div>
+    </div>
 
       {/* Generate Next Clip Dialog */}
       {activeMovie.clips.length > 0 && activeMovie.clips[activeMovie.clips.length - 1].lastFrameUrl && (
