@@ -124,10 +124,15 @@ export function ChatPanel() {
     }
   }, [isGenerating, fetchUsage])
 
-  // Initialize selectedModels with default model if empty
+  // Initialize selectedModels with all enabled models if empty
   useEffect(() => {
-    if (selectedModels.length === 0 && selectedModel) {
-      toggleModelSelection(selectedModel)
+    if (selectedModels.length === 0) {
+      // Select all enabled models by default
+      const enabledModels = MODELS.filter(m => !m.disabled).map(m => m.id)
+      enabledModels.forEach(model => toggleModelSelection(model))
+
+      // Set multi-model mode since we're selecting multiple models
+      setMultiModelMode(true)
     }
   }, [])
 
