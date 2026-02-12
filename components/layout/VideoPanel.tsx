@@ -838,7 +838,7 @@ export function VideoPanel() {
 
           <div className="flex-1 min-h-0 flex items-center justify-center p-4 sm:p-8 overflow-y-auto">
         {isGenerating ? (
-          /* Generating State */}
+          /* Generating State */
           <div className="text-center max-w-md px-4">
             <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-4 sm:mb-6 rounded-2xl bg-background-secondary flex items-center justify-center">
               <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-accent animate-spin" />
