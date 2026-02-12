@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
   Youtube,
+  X,
 } from 'lucide-react'
 import { useAppStore, Conversation } from '@/lib/store'
 import { YouTubeConnect } from '@/components/ui/YouTubeConnect'
@@ -50,7 +51,11 @@ function groupConversationsByDate(conversations: Conversation[]) {
   return groups.filter((g) => g.conversations.length > 0)
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  onClose?: () => void
+}
+
+export function Sidebar({ onClose }: SidebarProps = {}) {
   const [activeTab, setActiveTab] = useState<'conversations' | 'movies'>('conversations')
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Today', 'Yesterday']))
@@ -165,6 +170,8 @@ export function Sidebar() {
     } else {
       setCurrentVideo(null)
     }
+    // Close drawer on mobile
+    if (onClose) onClose()
   }
 
   const handleSelectMovie = (movieId: string) => {
@@ -187,10 +194,14 @@ export function Sidebar() {
           // Show the latest completed video from that conversation
           const latestVideo = [...conv.videos].reverse().find(v => v.status === 'completed' && v.videoUrl)
           setCurrentVideo(latestVideo || null)
+          // Close drawer on mobile
+          if (onClose) onClose()
           return
         }
       }
     }
+    // Close drawer on mobile
+    if (onClose) onClose()
   }
 
   const handleDeleteConversation = async (e: React.MouseEvent, id: string) => {
@@ -239,10 +250,21 @@ export function Sidebar() {
   return (
     <aside className="w-64 h-full flex flex-col bg-[#171717] border-r border-[#2a2a2a]">
       {/* Header with New Dropdown */}
-      <div className="p-3 relative new-dropdown-container">
+      <div className="p-3 relative new-dropdown-container flex items-center gap-2">
+        {/* Close button - only visible when onClose provided (mobile drawer) */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="lg:hidden p-2 hover:bg-[#2a2a2a] rounded-lg flex-shrink-0"
+            aria-label="Close menu"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+
         <button
           onClick={() => setNewDropdownOpen(!newDropdownOpen)}
-          className="w-full h-10 rounded-lg border border-[#3a3a3a] hover:bg-[#2a2a2a] flex items-center px-4 gap-2 text-sm text-foreground transition-colors"
+          className={`${onClose ? 'flex-1' : 'w-full'} h-10 rounded-lg border border-[#3a3a3a] hover:bg-[#2a2a2a] flex items-center px-4 gap-2 text-sm text-foreground transition-colors`}
           data-onboarding="new-button"
         >
           <Plus className="w-4 h-4" />

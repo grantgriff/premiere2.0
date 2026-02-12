@@ -824,7 +824,7 @@ export function VideoPanel() {
 
   return (
     <>
-      <main className="flex-1 min-w-[600px] min-h-0 flex bg-background border-r border-border">
+      <main className="flex-1 min-w-0 flex bg-background lg:border-r border-border">
         {/* Video Viewport */}
         <div className="flex-1 min-h-0 flex flex-col">
           {/* Conversation Video Gallery */}
@@ -836,14 +836,14 @@ export function VideoPanel() {
             />
           )}
 
-          <div className="flex-1 min-h-0 flex items-center justify-center p-8 overflow-y-auto">
+          <div className="flex-1 min-h-0 flex items-center justify-center p-4 sm:p-8 overflow-y-auto">
         {isGenerating ? (
           /* Generating State */
-          <div className="text-center max-w-md">
-            <div className="w-24 h-24 mx-auto mb-6 rounded-2xl bg-background-secondary flex items-center justify-center">
-              <Loader2 className="w-12 h-12 text-accent animate-spin" />
+          <div className="text-center max-w-md px-4">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-4 sm:mb-6 rounded-2xl bg-background-secondary flex items-center justify-center">
+              <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-accent animate-spin" />
             </div>
-            <h2 className="text-xl font-semibold text-foreground mb-2">
+            <h2 className="text-lg sm:text-xl font-semibold text-foreground mb-2">
               Generating Video...
             </h2>
             <div className="w-full max-w-xs mx-auto mb-4">
@@ -859,7 +859,7 @@ export function VideoPanel() {
             </div>
           </div>
         ) : currentVideo?.videoUrl ? (
-          <div className="w-full max-w-4xl">
+          <div className="w-full max-w-4xl px-3 sm:px-6">
             {/* Video Container */}
             <div ref={videoContainerRef} className="video-container relative bg-black rounded-lg overflow-hidden">
               <video
@@ -986,40 +986,42 @@ export function VideoPanel() {
               </div>
 
               {/* Video Info */}
-              <div className="flex items-center justify-between text-sm text-foreground-secondary">
-                <div className="flex items-center gap-4">
-                  <span className="model-chip">{currentVideo.model}</span>
-                  <span>{currentVideo.duration}s duration</span>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-sm text-foreground-secondary">
+                <div className="flex items-center gap-3">
+                  <span className="model-chip text-xs">{currentVideo.model}</span>
+                  <span className="text-sm">{currentVideo.duration}s</span>
                 </div>
-                <span className="text-xs opacity-60">
-                  Prompt: {currentVideo.prompt.slice(0, 50)}
+                <span className="text-xs opacity-60 truncate max-w-full">
+                  {currentVideo.prompt.slice(0, 50)}
                   {currentVideo.prompt.length > 50 ? '...' : ''}
                 </span>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-3 pt-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2">
                 <button
                   onClick={() => setShowAddToMovieDialog(true)}
-                  className="btn-secondary flex items-center gap-2"
+                  className="btn-secondary flex items-center justify-center gap-2"
                   title="Add to movie"
                 >
                   <Film className="w-4 h-4" />
-                  Add to Movie
+                  <span className="hidden sm:inline">Add to Movie</span>
+                  <span className="sm:hidden">Add</span>
                 </button>
                 <button
                   onClick={handleDownload}
-                  className="btn-secondary flex items-center gap-2"
+                  className="btn-secondary flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   Download
                 </button>
                 <button
                   onClick={handleRegenerate}
-                  className="btn-secondary flex items-center gap-2"
+                  className="btn-secondary flex items-center justify-center gap-2"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  {comments.length > 0 ? 'Regenerate with Feedback' : 'Regenerate'}
+                  <span className="hidden sm:inline">{comments.length > 0 ? 'Regenerate with Feedback' : 'Regenerate'}</span>
+                  <span className="sm:hidden">Regen</span>
                   {comments.length > 0 && (
                     <span className="ml-1 text-xs bg-accent text-white px-1.5 py-0.5 rounded-full">
                       {comments.length}
@@ -1033,10 +1035,11 @@ export function VideoPanel() {
                     // Always show feedback panel if there are comments
                     setShowFeedbackPanel(newState || comments.length > 0)
                   }}
-                  className={`btn-secondary flex items-center gap-2 ${showAnnotations ? 'bg-accent/20 border-accent' : ''}`}
+                  className={`btn-secondary flex items-center justify-center gap-2 ${showAnnotations ? 'bg-accent/20 border-accent' : ''}`}
                 >
                   <MessageSquare className="w-4 h-4" />
-                  {showAnnotations ? 'Stop Annotating' : 'Add Feedback'}
+                  <span className="hidden sm:inline">{showAnnotations ? 'Stop Annotating' : 'Add Feedback'}</span>
+                  <span className="sm:hidden">{showAnnotations ? 'Stop' : 'Feedback'}</span>
                   {comments.length > 0 && (
                     <span className="ml-1 text-xs bg-accent text-white px-1.5 py-0.5 rounded-full">
                       {comments.length}
@@ -1130,8 +1133,8 @@ export function VideoPanel() {
 
       {/* Add to Movie Dialog */}
       {showAddToMovieDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-          <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-xl shadow-2xl w-full max-w-md p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                 <Film className="w-5 h-5" />

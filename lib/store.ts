@@ -182,6 +182,12 @@ interface AppState {
   selectedDuration: number
   setSelectedDuration: (duration: number) => void
 
+  // Responsive UI State
+  isSidebarOpen: boolean
+  setIsSidebarOpen: (open: boolean) => void
+  activeMobileTab: 'video' | 'chat'
+  setActiveMobileTab: (tab: 'video' | 'chat') => void
+
   // Characters
   characters: Character[]
   setCharacters: (characters: Character[]) => void
@@ -332,6 +338,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedModel: (model) => set({ selectedModel: model }),
   selectedDuration: 5,
   setSelectedDuration: (duration) => set({ selectedDuration: duration }),
+
+  // Responsive UI State
+  isSidebarOpen: false,
+  setIsSidebarOpen: (open) => set({ isSidebarOpen: open }),
+  activeMobileTab: 'video',
+  setActiveMobileTab: (tab) => set({ activeMobileTab: tab }),
 
   // Characters
   characters: [],

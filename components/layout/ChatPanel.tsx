@@ -591,9 +591,9 @@ export function ChatPanel() {
   }
 
   return (
-    <aside className="w-[360px] h-full flex flex-col panel border-l border-border">
+    <aside className="w-full lg:w-[360px] h-full flex flex-col panel lg:border-l border-border">
       {/* Chat Messages */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-4">
         {!activeConversation || activeConversation.messages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center text-foreground-secondary">
@@ -630,16 +630,16 @@ export function ChatPanel() {
       </div>
 
       {/* Model Selector */}
-      <div className="px-4 py-3 border-t border-border" data-onboarding="model-selection">
+      <div className="px-3 sm:px-4 py-3 border-t border-border" data-onboarding="model-selection">
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs text-foreground-secondary">Model</label>
           {selectedModels.length > 1 && (
             <span className="text-xs text-accent">
-              Multi-Model ({selectedModels.length} selected)
+              Multi-Model ({selectedModels.length})
             </span>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5 sm:gap-2">
           {MODELS.map((model) => {
             const isSelected = selectedModels.includes(model.id)
             return (
@@ -695,9 +695,9 @@ export function ChatPanel() {
       </div>
 
       {/* Duration Selector */}
-      <div className="px-4 py-3 border-t border-border">
+      <div className="px-3 sm:px-4 py-3 border-t border-border">
         <label className="text-xs text-foreground-secondary mb-2 block">Duration</label>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5 sm:gap-2">
           {getModelDurations(selectedModel).map((duration) => (
             <button
               key={duration}
@@ -713,9 +713,9 @@ export function ChatPanel() {
 
       {/* Selected Characters */}
       {selectedCharacterIds.length > 0 && (
-        <div className="px-4 py-2 border-t border-border">
+        <div className="px-3 sm:px-4 py-2 border-t border-border">
           <label className="text-xs text-foreground-secondary mb-2 block">Characters</label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
             {selectedCharacterIds.map((id) => {
               const char = characters.find((c) => c.id === id)
               if (!char) return null
@@ -753,7 +753,7 @@ export function ChatPanel() {
 
       {/* Selected YouTube References */}
       {selectedYouTubeVideos.length > 0 && (
-        <div className="px-4 py-2 border-t border-border">
+        <div className="px-3 sm:px-4 py-2 border-t border-border">
           <label className="text-xs text-foreground-secondary mb-2 block">
             YouTube References ({selectedYouTubeVideos.length}/3)
           </label>
@@ -829,7 +829,7 @@ export function ChatPanel() {
       )}
 
       {/* Input Area */}
-      <form onSubmit={handleSubmit} data-chatpanel-form className="p-4 border-t border-border">
+      <form onSubmit={handleSubmit} data-chatpanel-form className="p-3 sm:p-4 border-t border-border">
         <div className="relative">
           <textarea
             ref={inputRef}
@@ -839,7 +839,7 @@ export function ChatPanel() {
             placeholder="Describe your video... Use @name to tag characters"
             rows={3}
             maxLength={2000}
-            className="input-field w-full resize-none pr-12"
+            className="input-field w-full resize-none pr-12 text-sm sm:text-base"
             disabled={isGenerating}
           />
           <CharacterMention
@@ -917,25 +917,26 @@ export function ChatPanel() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-3">
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-foreground-secondary">{input.length}/2000</span>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 mt-3">
+          <div className="flex items-center gap-2 text-xs text-foreground-secondary">
+            <span>{input.length}/2000</span>
             {videoUsage && !videoUsage.isAdmin && videoUsage.remaining !== null && (
-              <span className={`text-xs ${videoUsage.remaining <= 3 ? 'text-warning' : 'text-foreground-secondary'} ${videoUsage.remaining === 0 ? 'text-error' : ''}`}>
-                {videoUsage.remaining}/{videoUsage.maxVideos} videos left
+              <span className={`hidden sm:inline ${videoUsage.remaining <= 3 ? 'text-warning' : 'text-foreground-secondary'} ${videoUsage.remaining === 0 ? 'text-error' : ''}`}>
+                {videoUsage.remaining} videos left
               </span>
             )}
           </div>
           <button
             type="submit"
             disabled={!input.trim() || isGenerating}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
             data-onboarding="generate-button"
           >
             {isGenerating ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Generating...
+                <span className="hidden sm:inline">Generating...</span>
+                <span className="sm:hidden">...</span>
               </>
             ) : (
               <>

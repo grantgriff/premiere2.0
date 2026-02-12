@@ -152,6 +152,20 @@
   .scrollbar-thin::-webkit-scrollbar-thumb {
     @apply bg-border/50 rounded-full;
   }
+
+  /* Safe area insets for mobile notches */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Touch-friendly minimum sizes */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
 }
 
 /* Animations */

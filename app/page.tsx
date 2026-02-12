@@ -7,12 +7,13 @@ import { MultiModelVideoPanel } from '@/components/layout/MultiModelVideoPanel'
 import { ChatPanel } from '@/components/layout/ChatPanel'
 import { AnalyticsDashboard } from '@/components/ui/AnalyticsDashboard'
 import { MovieTimeline } from '@/components/ui/MovieTimeline'
-import { Video, BarChart3, LogOut, User, Info } from 'lucide-react'
+import { Video, BarChart3, LogOut, User, Info, Menu, MessageSquare } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { signOut } from '@/lib/auth'
 import { useAppStore, useActiveMovie } from '@/lib/store'
 import { OnboardingOverlay } from '@/components/ui/OnboardingOverlay'
 import { WelcomePromptBar } from '@/components/ui/WelcomePromptBar'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
 
 export default function Home() {
   const [activeView, setActiveView] = useState<'studio' | 'analytics'>('studio')
@@ -25,6 +26,13 @@ export default function Home() {
   const activeConversationId = useAppStore((state) => state.activeConversationId)
   const isGenerating = useAppStore((state) => state.isGenerating)
   const moviePlaylist = useAppStore((state) => state.moviePlaylist)
+
+  // Responsive state
+  const { isMobile, isTablet } = useBreakpoint()
+  const isSidebarOpen = useAppStore((state) => state.isSidebarOpen)
+  const setIsSidebarOpen = useAppStore((state) => state.setIsSidebarOpen)
+  const activeMobileTab = useAppStore((state) => state.activeMobileTab)
+  const setActiveMobileTab = useAppStore((state) => state.setActiveMobileTab)
 
   // Load characters and movies on app initialization
   useEffect(() => {
@@ -116,14 +124,41 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Left Sidebar - 240px fixed */}
-      <Sidebar />
+    <div className="flex flex-col lg:flex-row h-screen overflow-hidden bg-background">
+      {/* Desktop: inline sidebar */}
+      <div className="hidden lg:block">
+        <Sidebar />
+      </div>
+
+      {/* Mobile/Tablet: overlay drawer */}
+      {isSidebarOpen && (isMobile || isTablet) && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+          {/* Drawer */}
+          <div className="fixed inset-y-0 left-0 w-64 z-50 lg:hidden animate-in slide-in-from-left-full">
+            <Sidebar onClose={() => setIsSidebarOpen(false)} />
+          </div>
+        </>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* View Toggle Header */}
         <div className="h-12 border-b border-border flex items-center justify-between px-4 bg-background-secondary/30">
+          {/* Hamburger menu for mobile/tablet */}
+          {(isMobile || isTablet) && (
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="lg:hidden p-2 hover:bg-background-secondary rounded-lg mr-2"
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
           <div className="flex items-center gap-1 p-1 rounded-lg bg-background-secondary">
             <button
               onClick={() => setActiveView('studio')}
@@ -190,31 +225,69 @@ export default function Home() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {activeView === 'studio' ? (
             <>
-              <div className="flex-1 flex overflow-hidden">
-                {/* Center Panel */}
-                {moviePlaylist.length > 0 ? (
-                  /* Movie playlist active — always show VideoPanel */
-                  <VideoPanel />
-                ) : !activeConversationId && !isGenerating ? (
-                  /* Welcome state - centered prompt bar */
-                  <div className="flex-1 flex items-center justify-center bg-background">
-                    <WelcomePromptBar onSubmit={(prompt, uploadedFiles) => {
-                      // Focus the ChatPanel input and trigger submission
-                      // We set the input via a custom event the ChatPanel listens for
-                      window.dispatchEvent(new CustomEvent('welcome-prompt-submit', { detail: { prompt, uploadedFiles } }))
-                    }} />
-                  </div>
-                ) : multiModelMode ? (
-                  <MultiModelVideoPanel generations={multiModelGenerations} />
-                ) : (
-                  <VideoPanel />
-                )}
+              <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                {/* Video Panel - responsive visibility */}
+                <div className={`
+                  flex-1 flex flex-col overflow-hidden
+                  ${isMobile && activeMobileTab !== 'video' ? 'hidden' : ''}
+                `}>
+                  {moviePlaylist.length > 0 ? (
+                    /* Movie playlist active — always show VideoPanel */
+                    <VideoPanel />
+                  ) : !activeConversationId && !isGenerating ? (
+                    /* Welcome state - centered prompt bar */
+                    <div className="flex-1 flex items-center justify-center bg-background px-4">
+                      <WelcomePromptBar onSubmit={(prompt, uploadedFiles) => {
+                        // Focus the ChatPanel input and trigger submission
+                        // We set the input via a custom event the ChatPanel listens for
+                        window.dispatchEvent(new CustomEvent('welcome-prompt-submit', { detail: { prompt, uploadedFiles } }))
+                      }} />
+                    </div>
+                  ) : multiModelMode ? (
+                    <MultiModelVideoPanel generations={multiModelGenerations} />
+                  ) : (
+                    <VideoPanel />
+                  )}
+                </div>
 
-                {/* Right Sidebar - 360px fixed (hidden when welcome state or movie playlist is playing) */}
-                <div className={(!activeConversationId && !isGenerating) || moviePlaylist.length > 0 ? 'sr-only' : ''}>
+                {/* Chat Panel - responsive width and visibility */}
+                <div className={`
+                  w-full lg:w-[360px] flex flex-col
+                  ${isMobile && activeMobileTab !== 'chat' ? 'hidden' : ''}
+                  ${isTablet ? 'max-h-[50vh] border-t' : ''}
+                  ${(!activeConversationId && !isGenerating) || moviePlaylist.length > 0 ? 'sr-only' : ''}
+                `}>
                   <ChatPanel />
                 </div>
               </div>
+
+              {/* Mobile tab navigation - only on mobile */}
+              {isMobile && activeConversationId && (
+                <nav className="flex border-t border-border bg-background safe-bottom">
+                  <button
+                    onClick={() => setActiveMobileTab('video')}
+                    className={`flex-1 py-3 text-sm font-medium flex flex-col items-center gap-1 ${
+                      activeMobileTab === 'video'
+                        ? 'text-accent border-t-2 border-accent'
+                        : 'text-foreground-secondary'
+                    }`}
+                  >
+                    <Video className="w-5 h-5" />
+                    Video
+                  </button>
+                  <button
+                    onClick={() => setActiveMobileTab('chat')}
+                    className={`flex-1 py-3 text-sm font-medium flex flex-col items-center gap-1 ${
+                      activeMobileTab === 'chat'
+                        ? 'text-accent border-t-2 border-accent'
+                        : 'text-foreground-secondary'
+                    }`}
+                  >
+                    <MessageSquare className="w-5 h-5" />
+                    Chat
+                  </button>
+                </nav>
+              )}
 
               {/* Movie Timeline at bottom */}
               {activeMovie && <MovieTimeline />}
