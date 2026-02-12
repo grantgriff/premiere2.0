@@ -1,6 +1,6 @@
 'use client'
 
-import { Clock, Trash2, MessageSquare, Sparkles, Loader2 } from 'lucide-react'
+import { Clock, Trash2, MessageSquare, Sparkles } from 'lucide-react'
 import { VideoComment } from './VideoAnnotationOverlay'
 
 interface FeedbackPanelProps {
@@ -8,7 +8,6 @@ interface FeedbackPanelProps {
   onCommentClick: (timestamp: number) => void
   onDeleteComment: (commentId: string) => void
   onRegenerateWithFeedback: () => void
-  isRefining: boolean
 }
 
 export function FeedbackPanel({
@@ -16,7 +15,6 @@ export function FeedbackPanel({
   onCommentClick,
   onDeleteComment,
   onRegenerateWithFeedback,
-  isRefining,
 }: FeedbackPanelProps) {
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -99,20 +97,10 @@ export function FeedbackPanel({
         <div className="p-4 border-t border-[#2a2a2a]">
           <button
             onClick={onRegenerateWithFeedback}
-            disabled={isRefining}
-            className="w-full px-4 py-3 bg-accent hover:bg-accent/90 disabled:bg-accent/50 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+            className="w-full px-4 py-3 bg-accent hover:bg-accent/90 text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
           >
-            {isRefining ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Refining prompt...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                Regenerate with Feedback
-              </>
-            )}
+            <Sparkles className="w-4 h-4" />
+            Regenerate with Feedback
           </button>
           <p className="text-xs text-foreground-secondary text-center mt-2">
             AI will refine your feedback into an improved prompt

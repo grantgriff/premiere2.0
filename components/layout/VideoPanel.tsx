@@ -66,7 +66,6 @@ export function VideoPanel() {
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false)
   const [showAddToMovieDialog, setShowAddToMovieDialog] = useState(false)
   const [showFeedbackPanel, setShowFeedbackPanel] = useState(false)
-  const [isRefining, setIsRefining] = useState(false)
   const [newMovieTitle, setNewMovieTitle] = useState('')
   const [isCreatingMovie, setIsCreatingMovie] = useState(false)
   const [editingMovieTitle, setEditingMovieTitle] = useState('')
@@ -206,39 +205,6 @@ export function VideoPanel() {
     videoRef.current.currentTime = timestamp
     setCurrentTime(timestamp)
   }
-
-  // Handle regenerate from feedback panel
-  const handleRegenerateFromPanel = async () => {
-    if (!currentVideo || comments.length === 0) return
-
-    setIsRefining(true)
-    try {
-      // Call Gemini to refine prompt
-      const response = await fetch(`/api/videos/${currentVideo.id}/refine-prompt`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          originalPrompt: currentVideo.prompt,
-          comments: comments.map((c) => ({
-            timestamp: c.timestamp,
-            text: c.text,
-            boundingBox: c.boundingBox,
-          })),
-        }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        // Regenerate with refined prompt (context will be determined in handleRegenerateWithPrompt)
-        await handleRegenerateWithPrompt(data.refinedPrompt)
-      }
-    } catch (error) {
-      console.error('Failed to refine prompt:', error)
-    } finally {
-      setIsRefining(false)
-    }
-  }
-
   // Handle regenerate with refined prompt
   const handleRegenerateWithPrompt = async (refinedPrompt: string, referenceFrameUrl?: string) => {
     if (!currentVideo || !activeConversationId || !user) {
@@ -1107,8 +1073,7 @@ export function VideoPanel() {
             comments={comments}
             onCommentClick={handleCommentClick}
             onDeleteComment={handleDeleteComment}
-            onRegenerateWithFeedback={handleRegenerateFromPanel}
-            isRefining={isRefining}
+            onRegenerateWithFeedback={handleRegenerate}
           />
         )}
       </main>
